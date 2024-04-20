@@ -15,16 +15,17 @@ def print_elapsed(start: float, *args, **kwargs):
     print(f"[{elapsed:.1f}s]", *args, **kwargs)
 
 
-fp_comp = Path("./count.json")
+FP_COMP = Path("./count.json")
+MAX_TEAM_SIZE = 8
 
 
-def load_comp_data(max_team_size: int) -> "list[Composition] | None":
+def load_comp_data() -> "list[Composition] | None":
     from count import Composition
 
-    expected_hash = CHAMPIONS_HASH + "_" + str(max_team_size)
+    expected_hash = CHAMPIONS_HASH + "_" + str(MAX_TEAM_SIZE)
 
-    if fp_comp.exists():
-        with open(fp_comp) as file:
+    if FP_COMP.exists():
+        with open(FP_COMP) as file:
             data = json.load(file)
 
             if data["hash"] == expected_hash:
@@ -36,10 +37,10 @@ def load_comp_data(max_team_size: int) -> "list[Composition] | None":
                     sys.exit()
 
 
-def dump_comp_data(comps: "set[Composition]", max_team_size: int):
-    expected_hash = CHAMPIONS_HASH + "_" + str(max_team_size)
+def dump_comp_data(comps: "set[Composition]"):
+    expected_hash = CHAMPIONS_HASH + "_" + str(MAX_TEAM_SIZE)
 
-    with open(fp_comp, "w") as file:
+    with open(FP_COMP, "w") as file:
         lines = [comp.dump() for comp in comps]
 
         data = dict(

@@ -1,4 +1,3 @@
-import json
 import time
 from functools import cached_property
 from itertools import chain
@@ -10,8 +9,9 @@ from data import (
     CHAMPIONS_BY_TRAIT,
     CHAMPIONS_HASH,
     Champion,
+    Trait,
 )
-from utils import dump_comp_data, load_comp_data, print_elapsed
+from utils import MAX_TEAM_SIZE, dump_comp_data, load_comp_data, print_elapsed
 
 
 class Composition:
@@ -44,15 +44,19 @@ class Composition:
         return Composition(result)
 
     @cached_property
-    def score(self):
-        trait_counts: dict[int, int] = dict()
+    def trait_counts(self):
+        trait_counts: dict[Trait, int] = dict()
 
         for c in self.champions:
             for t in c.traits:
-                trait_counts.setdefault(t.id, 0)
-                trait_counts[t.id] += 1
+                trait_counts.setdefault(t, 0)
+                trait_counts[t] += 1
 
-        vs = list(trait_counts.values())
+        return trait_counts
+
+    @cached_property
+    def score(self):
+        vs = list(self.trait_counts.values())
         total = sum(vs) - len(vs)
         return total
 
@@ -78,7 +82,6 @@ def expand_comp(comp: Composition) -> list[Composition]:
 
 
 cache_hits = 0
-MAX_TEAM_SIZE = 8
 
 
 def find_champion_comps(champion: Champion, skip: set[Composition]) -> set[Composition]:
