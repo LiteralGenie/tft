@@ -17,6 +17,9 @@ class Composition:
         ids.sort()
         return hash(tuple(ids))
 
+    def __eq__(self, other: object) -> bool:
+        return hash(other) == hash(self)
+
     def __hash__(self) -> int:
         return self.hash
 
@@ -61,21 +64,21 @@ def expand_comp(comp: Composition) -> set[Composition]:
 cache_hits = 0
 
 
-def find_champion_comps(
-    champion: Champion, skip: set[Composition] | None = None
-) -> set[Composition]:
+def find_champion_comps(champion: Champion, skip: set[Composition]) -> set[Composition]:
     # Skip gets mutated for efficiency
-    skip = skip or set()
+    print(champion.name)
+
+    global cache_hits
 
     init = Composition(set([champion]))
-    comps: set[Composition] = set([init])
-    prev: set[Composition] = set([init])
+    comps: dict[int, Composition] = dict()
+    prev: dict[int, Composition] = {hash(init): init}
 
     start = time.time()
-    for _ in range(5):
-        update: set[Composition] = set()
+    for size in range(9):
+        update: dict[int, Composition] = dict()
 
-        for comp in prev:
+        for comp in prev.values():
             if comp in skip:
                 cache_hits += 1
                 continue
@@ -83,46 +86,33 @@ def find_champion_comps(
             skip.add(comp)
 
             expansions = expand_comp(comp)
-            update.update(expansions)
 
-        comps.update(update)
+            for expanded in expansions:
+                update[hash(expanded)] = expanded
+                comps[hash(expanded)] = expanded
+
         prev = update
-        print_elapsed(start, f"Expanded to {len(update)} comps")
+        # print_elapsed(
+        #     start,
+        #     f"Calculated {len(update)} comps of size {size+2} with {cache_hits} cache_hits",
+        # )
 
     return comps
 
 
-assert hash(
-    Composition(
-        set(
-            [
-                CHAMPIONS[0],
-                CHAMPIONS[1],
-            ]
-        )
-    )
-) == hash(
-    Composition(
-        set(
-            [
-                CHAMPIONS[1],
-                CHAMPIONS[0],
-            ]
-        )
-    )
-)
-
-
 def main():
+    comps: set[Composition] = set()
+
     start = time.time()
-    find_champion_comps(CHAMPIONS[0])
-    print_elapsed(start, "done")
+    for champion in CHAMPIONS:
+        find_champion_comps(champion, comps)
+    print_elapsed(start, f"Found {len(comps)} compositions")
 
 
 if __name__ == "__main__":
-    import cProfile
-    from pstats import SortKey
+    # import cProfile
+    # from pstats import SortKey
 
-    cProfile.run("main()", sort=SortKey.CUMULATIVE)
+    # cProfile.run("main()", sort=SortKey.CUMULATIVE)
 
-    # main()
+    main()

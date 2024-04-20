@@ -1,5 +1,4 @@
 import time
-from functools import wraps
 
 
 def print_elapsed(start: float, *args, **kwargs):
