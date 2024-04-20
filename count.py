@@ -11,7 +11,7 @@ from data import (
     CHAMPIONS_HASH,
     Champion,
 )
-from utils import print_elapsed
+from utils import dump_comp_data, load_comp_data, print_elapsed
 
 
 class Composition:
@@ -122,20 +122,8 @@ def main():
     expected_hash = CHAMPIONS_HASH + "_" + str(MAX_TEAM_SIZE)
 
     fp_cache = Path("./count.json")
-    cache = None
-    if fp_cache.exists():
-        with open(fp_cache) as file:
-            data = json.load(file)
 
-            if data["hash"] == expected_hash:
-                cache = [Composition.load(ln) for ln in data["lines"]]
-            else:
-                print("Cache exists but invalid (or outdated) hash")
-                answer = input("(y/n) Override? ")
-                if answer.strip().lower() != "y":
-                    return
-
-    comps: set[Composition] = cache or set()
+    comps: set[Composition] = load_comp_data(MAX_TEAM_SIZE)
     if not comps:
         start = time.time()
 
@@ -144,16 +132,9 @@ def main():
             update = find_champion_comps(champion, seen)
             comps.update(update.values())
 
+        dump_comp_data(comps, MAX_TEAM_SIZE)
+
         print_elapsed(start, f"Found {len(comps):,} compositions")
-
-        with open(fp_cache, "w") as file:
-            lines = [comp.dump() for comp in comps]
-
-            data = dict(
-                hash=expected_hash,
-                lines=lines,
-            )
-            json.dump(data, file, indent=2)
 
     for size in range(1, 11):
         filtered = [c for c in comps if len(c) == size]
