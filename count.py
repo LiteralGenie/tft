@@ -54,12 +54,6 @@ class Composition:
 
         return trait_counts
 
-    @cached_property
-    def score(self):
-        vs = list(self.trait_counts.values())
-        total = sum(vs) - len(vs)
-        return total
-
     def dump(self) -> list[int]:
         return [c.id for c in self.champions]
 
@@ -142,10 +136,6 @@ def main():
     for size in range(1, 11):
         filtered = [c for c in comps if len(c) == size]
         print(f"{len(filtered):,} comps of size {size}")
-
-    for score in range(20):
-        filtered = [c for c in comps if c.score == score]
-        print(f"{len(filtered):,} comps with score {score}")
 
 
 if __name__ == "__main__":

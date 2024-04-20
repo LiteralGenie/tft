@@ -7,12 +7,14 @@ class Trait:
 
     id: int
     name: str
+    tiers: list[int]
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, tiers: list[int]):
         self.id = self._NEXT_ID
         self.__class__._NEXT_ID += 1
 
         self.name = name
+        self.tiers = tiers
 
     def __hash__(self) -> int:
         return self.id
@@ -22,33 +24,33 @@ class Trait:
 
 
 class TRAITS:
-    ALTRUIST = Trait("Altruist")
-    ARCANIST = Trait("Arcanist")
-    BEHEMOTH = Trait("Behemoth")
-    BRUISER = Trait("Bruiser")
+    ALTRUIST = Trait("Altruist", [2, 3, 4])
+    ARCANIST = Trait("Arcanist", [2, 4, 6, 8])
+    BEHEMOTH = Trait("Behemoth", [2, 4, 6])
+    BRUISER = Trait("Bruiser", [2, 4, 6, 8])
 
-    DRAGONLORD = Trait("Dragonlord")
-    DRYAD = Trait("Dryad")
-    DUELIST = Trait("Duelist")
-    FATED = Trait("Fated")
+    DRAGONLORD = Trait("Dragonlord", [2, 3, 4, 5])
+    DRYAD = Trait("Dryad", [2, 4, 6])
+    DUELIST = Trait("Duelist", [2, 4, 6, 8])
+    FATED = Trait("Fated", [3, 5, 7, 10])
 
-    FORTUNE = Trait("Fortune")
-    GHOSTLY = Trait("Ghostly")
-    HEAVENLY = Trait("Heavenly")
-    INKSHADOW = Trait("Inkshadow")
+    FORTUNE = Trait("Fortune", [3, 5])
+    GHOSTLY = Trait("Ghostly", [2, 4, 6, 8])
+    HEAVENLY = Trait("Heavenly", [2, 3, 4, 5, 6, 7])
+    INKSHADOW = Trait("Inkshadow", [3, 5, 7])
 
-    INVOKER = Trait("Invoker")
-    MYTHIC = Trait("Mythic")
-    PORCELAIN = Trait("Porcelain")
-    STORYWEAVER = Trait("Storyweaver")
+    INVOKER = Trait("Invoker", [2, 4, 6])
+    MYTHIC = Trait("Mythic", [3, 5, 7, 10])
+    PORCELAIN = Trait("Porcelain", [2, 4, 6])
+    STORYWEAVER = Trait("Storyweaver", [3, 5, 7, 10])
 
-    REAPER = Trait("Reaper")
-    SAGE = Trait("Sage")
-    SNIPER = Trait("Sniper")
-    TRICKSHOT = Trait("Trickshot")
+    REAPER = Trait("Reaper", [2, 4])
+    SAGE = Trait("Sage", [2, 3, 4, 5])
+    SNIPER = Trait("Sniper", [2, 4, 6])
+    TRICKSHOT = Trait("Trickshot", [2, 4])
 
-    UMBRAL = Trait("Umbral")
-    WARDEN = Trait("Warden")
+    UMBRAL = Trait("Umbral", [2, 4, 6, 9])
+    WARDEN = Trait("Warden", [2, 4, 6])
 
 
 class Champion:
