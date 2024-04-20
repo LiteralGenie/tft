@@ -1,0 +1,31 @@
+strings = [
+    "Altruist",
+    "Arcanist",
+    "Artist",
+    "Behemoth",
+    "Bruiser",
+    "Duelist",
+    "Great",
+    "Invoker",
+    "Lovers",
+    "Reaper",
+    "Sage",
+    "Sniper",
+    "Spirit Walker",
+    "Trickshot",
+    "Warden",
+    "Dragonlord",
+    "Dryad",
+    "Fated",
+    "Fortune",
+    "Ghostly",
+    "Heavenly",
+    "Inkshadow",
+    "Mythic",
+    "Porcelain",
+    "Storyweaver",
+    "Umbral",
+]
+
+for s in strings:
+    print(f'    {s.upper().replace(" ", "_")}: Trait("{s}")')
