@@ -89,11 +89,11 @@ def find_champion_comps(champion: Champion, skip: set[Composition]) -> set[Compo
     print(champion.name)
 
     init = Composition([champion])
-    comps: dict[int, Composition] = dict()
+    comps: dict[int, Composition] = {hash(init): init}
     prev: dict[int, Composition] = {hash(init): init}
 
     start = time.time()
-    for size in range(MAX_TEAM_SIZE - 1):
+    for size in range(2, MAX_TEAM_SIZE + 1):
         update: dict[int, Composition] = dict()
 
         for comp in prev.values():
@@ -112,7 +112,7 @@ def find_champion_comps(champion: Champion, skip: set[Composition]) -> set[Compo
         prev = update
         print_elapsed(
             start,
-            f"Calculated {len(update)} comps of size {size+2} with {cache_hits} cache_hits",
+            f"Calculated {len(update)} comps of size {size} with {cache_hits} cache_hits",
         )
 
     return comps
@@ -138,8 +138,12 @@ def main():
     comps: set[Composition] = cache or set()
     if not comps:
         start = time.time()
+
+        seen = set()
         for champion in CHAMPIONS:
-            find_champion_comps(champion, comps)
+            update = find_champion_comps(champion, seen)
+            comps.update(update.values())
+
         print_elapsed(start, f"Found {len(comps):,} compositions")
 
         with open(fp_cache, "w") as file:
@@ -161,9 +165,9 @@ def main():
 
 
 if __name__ == "__main__":
-    import cProfile
-    from pstats import SortKey
+    # import cProfile
+    # from pstats import SortKey
 
-    cProfile.run("main()", sort=SortKey.CUMULATIVE)
+    # cProfile.run("main()", sort=SortKey.CUMULATIVE)
 
-    # main()
+    main()
