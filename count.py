@@ -1,7 +1,15 @@
+import json
 import time
 from functools import cached_property
+from pathlib import Path
 
-from data import CHAMPIONS, CHAMPIONS_BY_TRAIT, Champion
+from data import (
+    CHAMPIONS,
+    CHAMPIONS_BY_ID,
+    CHAMPIONS_BY_TRAIT,
+    CHAMPIONS_HASH,
+    Champion,
+)
 from utils import print_elapsed
 
 
@@ -47,6 +55,14 @@ class Composition:
         total = sum(vs) - len(vs)
         return total
 
+    def dump(self) -> list[int]:
+        return [c.id for c in self.champions]
+
+    @classmethod
+    def load(cls, data: list[int]) -> "Composition":
+        cs = [CHAMPIONS_BY_ID[id] for id in data]
+        return cls(cs)
+
 
 def expand_comp(comp: Composition) -> list[Composition]:
     traits = set(t for c in comp.champions for t in c.traits)
@@ -61,6 +77,7 @@ def expand_comp(comp: Composition) -> list[Composition]:
 
 
 cache_hits = 0
+MAX_TEAM_SIZE = 8
 
 
 def find_champion_comps(champion: Champion, skip: set[Composition]) -> set[Composition]:
@@ -75,7 +92,7 @@ def find_champion_comps(champion: Champion, skip: set[Composition]) -> set[Compo
     prev: dict[int, Composition] = {hash(init): init}
 
     start = time.time()
-    for size in range(7):
+    for size in range(MAX_TEAM_SIZE + 1):
         update: dict[int, Composition] = dict()
 
         for comp in prev.values():
@@ -101,12 +118,37 @@ def find_champion_comps(champion: Champion, skip: set[Composition]) -> set[Compo
 
 
 def main():
-    comps: set[Composition] = set()
+    expected_hash = CHAMPIONS_HASH + "_" + str(MAX_TEAM_SIZE)
 
-    start = time.time()
-    for champion in CHAMPIONS:
-        find_champion_comps(champion, comps)
-    print_elapsed(start, f"Found {len(comps):,} compositions")
+    fp_cache = Path("./count.json")
+    cache = None
+    if fp_cache.exists():
+        with open(fp_cache) as file:
+            data = json.load(fp_cache)
+
+            if data["hash"] == expected_hash:
+                cache = [Composition.load(ln) for ln in data["lines"]]
+            else:
+                print("Cache exists but invalid (or outdated) hash")
+                answer = input("(y/n) Override?")
+                if answer.strip().lower() != "y":
+                    return
+
+    comps: set[Composition] = cache or set()
+    if not comps:
+        start = time.time()
+        for champion in CHAMPIONS:
+            find_champion_comps(champion, comps)
+        print_elapsed(start, f"Found {len(comps):,} compositions")
+
+        with open(fp_cache, "w") as file:
+            lines = [comp.dump() for comp in comps]
+
+            data = dict(
+                hash=expected_hash,
+                lines=lines,
+            )
+            json.dump(lines, file, indent=2)
 
     for size in range(1, 11):
         filtered = [c for c in comps if len(c) == size]

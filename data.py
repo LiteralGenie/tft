@@ -133,3 +133,7 @@ for c in CHAMPIONS:
     for t in c.traits:
         CHAMPIONS_BY_TRAIT.setdefault(t, set())
         CHAMPIONS_BY_TRAIT[t].add(c)
+
+CHAMPIONS_BY_ID: dict[int, Champion] = {c.id: c for c in CHAMPIONS}
+
+CHAMPIONS_HASH = ",".join(c.name for c in CHAMPIONS)
