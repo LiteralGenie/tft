@@ -6,9 +6,9 @@ from utils import print_elapsed
 
 
 class Composition:
-    champions: set[Champion]
+    champions: list[Champion]
 
-    def __init__(self, champions: set[Champion]):
+    def __init__(self, champions: list[Champion]):
         self.champions = champions
 
     @cached_property
@@ -31,8 +31,7 @@ class Composition:
         return f"({cs})"
 
     def add(self, champion: Champion) -> "Composition":
-        result = self.champions.copy()
-        result.add(champion)
+        result = [*self.champions.copy(), champion]
         return Composition(result)
 
     @cached_property
@@ -49,7 +48,7 @@ class Composition:
         return total
 
 
-def expand_comp(comp: Composition) -> set[Composition]:
+def expand_comp(comp: Composition) -> list[Composition]:
     traits = set(t for c in comp.champions for t in c.traits)
 
     candidates: set[Champion] = set()
@@ -58,7 +57,7 @@ def expand_comp(comp: Composition) -> set[Composition]:
             if c not in comp.champions:
                 candidates.add(c)
 
-    return set([comp.add(c) for c in candidates])
+    return [comp.add(c) for c in candidates]
 
 
 cache_hits = 0
@@ -71,12 +70,12 @@ def find_champion_comps(champion: Champion, skip: set[Composition]) -> set[Compo
 
     print(champion.name)
 
-    init = Composition(set([champion]))
+    init = Composition([champion])
     comps: dict[int, Composition] = dict()
     prev: dict[int, Composition] = {hash(init): init}
 
     start = time.time()
-    for size in range(10):
+    for size in range(7):
         update: dict[int, Composition] = dict()
 
         for comp in prev.values():
@@ -93,10 +92,10 @@ def find_champion_comps(champion: Champion, skip: set[Composition]) -> set[Compo
                 comps[hash(expanded)] = expanded
 
         prev = update
-        # print_elapsed(
-        #     start,
-        #     f"Calculated {len(update)} comps of size {size+2} with {cache_hits} cache_hits",
-        # )
+        print_elapsed(
+            start,
+            f"Calculated {len(update)} comps of size {size+2} with {cache_hits} cache_hits",
+        )
 
     return comps
 
@@ -119,9 +118,9 @@ def main():
 
 
 if __name__ == "__main__":
-    # import cProfile
-    # from pstats import SortKey
+    import cProfile
+    from pstats import SortKey
 
-    # cProfile.run("main()", sort=SortKey.CUMULATIVE)
+    cProfile.run("main()", sort=SortKey.CUMULATIVE)
 
-    main()
+    # main()
