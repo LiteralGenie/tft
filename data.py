@@ -88,7 +88,7 @@ CHAMPIONS: list[Champion] = [
 
     Champion("Kog'Maw", [_T.MYTHIC, _T.INVOKER, _T.SNIPER]),
     Champion("Malphite", [_T.HEAVENLY, _T.BEHEMOTH]),
-    Champion("Rek'Sai", [_T.FATED, _T.ARCANIST]),
+    Champion("Rek'Sai", [_T.DRYAD, _T.BRUISER]),
     Champion("Sivir", [_T.STORYWEAVER, _T.TRICKSHOT]),
 
     Champion("Yasuo", [_T.FATED, _T.DUELIST]),

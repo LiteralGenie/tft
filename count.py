@@ -1,6 +1,7 @@
 import json
 import time
 from functools import cached_property
+from itertools import chain
 from pathlib import Path
 
 from data import (
@@ -39,7 +40,7 @@ class Composition:
         return f"({cs})"
 
     def add(self, champion: Champion) -> "Composition":
-        result = [*self.champions.copy(), champion]
+        result = list(chain(self.champions, [champion]))
         return Composition(result)
 
     @cached_property
@@ -92,7 +93,7 @@ def find_champion_comps(champion: Champion, skip: set[Composition]) -> set[Compo
     prev: dict[int, Composition] = {hash(init): init}
 
     start = time.time()
-    for size in range(MAX_TEAM_SIZE + 1):
+    for size in range(MAX_TEAM_SIZE - 1):
         update: dict[int, Composition] = dict()
 
         for comp in prev.values():
@@ -124,13 +125,13 @@ def main():
     cache = None
     if fp_cache.exists():
         with open(fp_cache) as file:
-            data = json.load(fp_cache)
+            data = json.load(file)
 
             if data["hash"] == expected_hash:
                 cache = [Composition.load(ln) for ln in data["lines"]]
             else:
                 print("Cache exists but invalid (or outdated) hash")
-                answer = input("(y/n) Override?")
+                answer = input("(y/n) Override? ")
                 if answer.strip().lower() != "y":
                     return
 
@@ -148,7 +149,7 @@ def main():
                 hash=expected_hash,
                 lines=lines,
             )
-            json.dump(lines, file, indent=2)
+            json.dump(data, file, indent=2)
 
     for size in range(1, 11):
         filtered = [c for c in comps if len(c) == size]
