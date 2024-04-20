@@ -110,6 +110,21 @@ CHAMPIONS: list[Champion] = [
     Champion("Yorick", [_T.UMBRAL, _T.BEHEMOTH]),
     
     Champion("Zyra", [_T.STORYWEAVER, _T.SAGE]),
+
+    # 3 costs
+    Champion("Alune", [_T.UMBRAL, _T.INVOKER]),
+    Champion("Amumu", [_T.PORCELAIN, _T.WARDEN]),
+    Champion("Aphelios", [_T.FATED, _T.SNIPER]),
+    Champion("Bard", [_T.MYTHIC, _T.TRICKSHOT]),
+    Champion("Diana", [_T.DRAGONLORD, _T.SAGE]),
+    Champion("Illaoi", [_T.GHOSTLY, _T.ARCANIST, _T.WARDEN]),
+    Champion("Soraka", [_T.HEAVENLY, _T.ALTRUIST]),
+    Champion("Tahm Kench", [_T.MYTHIC, _T.BRUISER]),
+    Champion("Thresh", [_T.FATED, _T.BEHEMOTH]),
+    Champion("Tristana", [_T.FORTUNE, _T.DUELIST]),
+    Champion("Volibear", [_T.INKSHADOW, _T.DUELIST]),
+    Champion("Yone", [_T.UMBRAL, _T.REAPER]),
+    Champion("Zoe", [_T.FORTUNE, _T.STORYWEAVER, _T.ARCANIST]),
 ]
 # fmt: on
 

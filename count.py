@@ -66,16 +66,17 @@ cache_hits = 0
 
 def find_champion_comps(champion: Champion, skip: set[Composition]) -> set[Composition]:
     # Skip gets mutated for efficiency
-    print(champion.name)
 
     global cache_hits
+
+    print(champion.name)
 
     init = Composition(set([champion]))
     comps: dict[int, Composition] = dict()
     prev: dict[int, Composition] = {hash(init): init}
 
     start = time.time()
-    for size in range(9):
+    for size in range(10):
         update: dict[int, Composition] = dict()
 
         for comp in prev.values():
@@ -106,7 +107,15 @@ def main():
     start = time.time()
     for champion in CHAMPIONS:
         find_champion_comps(champion, comps)
-    print_elapsed(start, f"Found {len(comps)} compositions")
+    print_elapsed(start, f"Found {len(comps):,} compositions")
+
+    for size in range(1, 11):
+        filtered = [c for c in comps if len(c) == size]
+        print(f"{len(filtered):,} comps of size {size}")
+
+    for score in range(20):
+        filtered = [c for c in comps if c.score == score]
+        print(f"{len(filtered):,} comps with score {score}")
 
 
 if __name__ == "__main__":
