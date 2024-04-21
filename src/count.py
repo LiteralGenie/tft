@@ -2,8 +2,14 @@ import time
 from functools import cached_property
 from itertools import chain
 
-from data import ALL_CHAMPIONS, CHAMPIONS_BY_ID, CHAMPIONS_BY_TRAIT, Champion, Trait
-from utils import MAX_TEAM_SIZE, dump_comp_data, load_comp_data, print_elapsed
+from data.champions import (
+    ALL_CHAMPIONS,
+    CHAMPIONS_BY_ID,
+    CHAMPIONS_BY_TRAIT,
+    Champion,
+    Trait,
+)
+from lib.utils import MAX_TEAM_SIZE, dump_comp_data, load_comp_data, print_elapsed
 
 
 class Composition:

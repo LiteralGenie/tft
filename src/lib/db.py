@@ -1,8 +1,8 @@
 import sqlite3
 from typing import TypeAlias
 
-from config import DB_FILE
-from data import ALL_CHAMPIONS, ALL_TRAITS
+from data.champions import ALL_CHAMPIONS, ALL_TRAITS
+from lib.config import DB_FILE
 
 Database: TypeAlias = sqlite3.Connection
 

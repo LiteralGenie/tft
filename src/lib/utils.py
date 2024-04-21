@@ -3,7 +3,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from data import CHAMPIONS_HASH
+from data.champions import CHAMPIONS_HASH
 
 if TYPE_CHECKING:
     from count import Composition

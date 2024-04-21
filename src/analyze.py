@@ -1,6 +1,6 @@
 from count import Composition
-from data import ALL_TRAITS
-from utils import load_comp_data
+from data.champions import ALL_TRAITS
+from lib.utils import load_comp_data
 
 data = load_comp_data()
 if not data:
