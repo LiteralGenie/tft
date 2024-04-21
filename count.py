@@ -28,7 +28,9 @@ class Composition:
         return len(self.champions)
 
     def __repr__(self) -> str:
-        cs = ", ".join([c.__repr__() for c in self.champions])
+        cs = self.champions.copy()
+        cs.sort(key=lambda c: (c.cost, c.name))
+        cs = ", ".join(c.name for c in cs)
         return f"({cs})"
 
     def add(self, champion: Champion) -> "Composition":
