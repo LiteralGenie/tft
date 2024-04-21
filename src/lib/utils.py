@@ -1,12 +1,7 @@
-import pickle
 import time
-from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Callable, TypeVar
 
-from data.champions import CHAMPIONS_HASH
-
-if TYPE_CHECKING:
-    from count import Composition
+T = TypeVar("T")
 
 
 def print_elapsed(start: float, *args, **kwargs):
@@ -14,28 +9,12 @@ def print_elapsed(start: float, *args, **kwargs):
     print(f"[{elapsed:.1f}s]", *args, **kwargs)
 
 
-FP_COMP = Path("./count.pkl")
-MAX_TEAM_SIZE = 8
+def group_by(xs: list[T], key: Callable[[T], str]) -> dict[str, list[T]]:
+    result: dict[str, list[T]] = dict()
 
+    for x in xs:
+        k = key(x)
+        result.setdefault(k, [])
+        result[k].append(x)
 
-def load_comp_data() -> "list[Composition] | None":
-    expected_hash = CHAMPIONS_HASH + "_" + str(MAX_TEAM_SIZE)
-
-    FP_COMP = Path("./count.pkl")
-    if FP_COMP.exists():
-        with open(FP_COMP, "rb") as file:
-            data = pickle.load(file)
-
-            if data["hash"] == expected_hash:
-                return data["comps"]
-
-
-def dump_comp_data(comps: "set[Composition]"):
-    expected_hash = CHAMPIONS_HASH + "_" + str(MAX_TEAM_SIZE)
-
-    with open("count.pkl", "wb") as file:
-        data = dict(
-            hash=expected_hash,
-            comps=comps,
-        )
-        pickle.dump(data, file)
+    return result

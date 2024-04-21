@@ -155,5 +155,3 @@ for c in ALL_CHAMPIONS:
         CHAMPIONS_BY_TRAIT[t].add(c)
 
 CHAMPIONS_BY_ID: dict[int, Champion] = {c.id: c for c in ALL_CHAMPIONS}
-
-CHAMPIONS_HASH = ",".join(c.name for c in ALL_CHAMPIONS)

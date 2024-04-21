@@ -1,5 +1,5 @@
-from count import Composition
-from data.champions import ALL_TRAITS
+from data._champions import ALL_TRAITS
+from lib.composition import Composition
 from lib.utils import load_comp_data
 
 data = load_comp_data()
