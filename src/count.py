@@ -1,5 +1,6 @@
 import time
-from typing import TypeAlias
+from functools import cached_property
+from typing import Iterable
 
 from lib.db import (
     DbChampion,
@@ -11,9 +12,7 @@ from lib.db import (
 )
 from lib.utils import group_by, print_elapsed
 
-Composition: TypeAlias = tuple[int, ...]
-
-MAX_TEAM_SIZE = 4
+MAX_TEAM_SIZE = 8
 
 db = init_db()
 ALL_CHAMPIONS = get_all_champions(db)
@@ -21,8 +20,30 @@ ALL_TRAITS = get_all_traits(db)
 CHAMPIONS_BY_TRAIT = get_champions_by_trait(ALL_CHAMPIONS.values())
 
 
+class Composition:
+    ids: list[int]
+
+    def __init__(self, ids: list[int]) -> None:
+        self.ids = ids
+
+    @cached_property
+    def _hash(self) -> int:
+        ids_sorted = sorted(self.ids)
+        return hash(tuple(ids_sorted))
+
+    def __hash__(self) -> int:
+        return self._hash
+
+    def add(self, id_champion: int):
+        ids = self.ids.copy() + [id_champion]
+        return Composition(ids)
+
+    def __len__(self):
+        return len(self.ids)
+
+
 def get_comp_traits(comp: Composition) -> set[DbTrait]:
-    champs = [ALL_CHAMPIONS[id] for id in comp]
+    champs = [ALL_CHAMPIONS[id] for id in comp.ids]
 
     traits: set[DbTrait] = set()
     for champ in champs:
@@ -38,10 +59,10 @@ def expand_comp(comp: Composition) -> list[Composition]:
     candidates: set[DbChampion] = set()
     for t in traits:
         for c in CHAMPIONS_BY_TRAIT[t.id]:
-            if c.id not in comp:
+            if c.id not in comp.ids:
                 candidates.add(c)
 
-    return [comp + (c.id,) for c in candidates]
+    return [comp.add(c.id) for c in candidates]
 
 
 def find_comps(
@@ -81,7 +102,7 @@ def find_comps(
     return set(comps.values())
 
 
-def insert_comp(comp: Composition):
+def insert_comp(ids: Iterable[int]):
     id_comp = db.execute(
         """
         INSERT INTO compositions DEFAULT VALUES
@@ -95,7 +116,7 @@ def insert_comp(comp: Composition):
             (id_composition, id_champion) VALUES
             (?, ?)
         """,
-        [(id_comp, id_champ) for id_champ in comp],
+        [(id_comp, id_champ) for id_champ in ids],
     )
 
 
@@ -134,19 +155,22 @@ def main():
     tmp = group_by(comps, lambda c: "to_check" if not c["is_expanded"] else "to_skip")
     to_check = tmp.get("to_check", [])
     to_skip: set[Composition] = set(
-        tuple(c["id_champs"]) for c in tmp.get("to_skip", [])
+        Composition(c["id_champs"]) for c in tmp.get("to_skip", [])
     )
 
     print(f"Found {len(to_check)} comps to expand")
     for idx, db_comp in enumerate(to_check):
-        comp = tuple(db_comp["id_champs"])
-        champs = [ALL_CHAMPIONS[id].name for id in comp]
-        print(f"[{idx} / {len(to_check)}] Expanding comp of size {len(comp)}: {champs}")
+        comp = Composition(db_comp["id_champs"])
+        champs = [ALL_CHAMPIONS[id].name for id in comp.ids]
 
+        if len(comp) >= MAX_TEAM_SIZE:
+            continue
+
+        print(f"[{idx} / {len(to_check)}] Expanding comp of size {len(comp)}: {champs}")
         update = find_comps(comp, to_skip)
 
         for new_comp in update:
-            insert_comp(new_comp)
+            insert_comp(new_comp.ids)
 
         db.execute(
             """
