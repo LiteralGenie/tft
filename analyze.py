@@ -1,5 +1,5 @@
 from count import Composition
-from data import TRAITS
+from data import ALL_TRAITS
 from utils import load_comp_data
 
 data = load_comp_data()
@@ -11,11 +11,11 @@ def score_by_tiers(comp: Composition, cap_heavenly=True):
     score = 0
 
     for trait, count in comp.trait_counts.items():
-        for tier in trait.tiers:
+        for tier in trait.thresholds:
             if count >= tier:
                 score += 1
 
-                if cap_heavenly and trait is TRAITS.HEAVENLY:
+                if cap_heavenly and trait is ALL_TRAITS.HEAVENLY:
                     break
             else:
                 break

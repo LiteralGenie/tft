@@ -1,14 +1,14 @@
 from count import Composition
-from data import CHAMPIONS
+from data import ALL_CHAMPIONS
 
 
 def test_hash_composition():
-    assert hash(Composition(set([CHAMPIONS[0]]))) == hash(
-        Composition(set([CHAMPIONS[0]]))
+    assert hash(Composition(set([ALL_CHAMPIONS[0]]))) == hash(
+        Composition(set([ALL_CHAMPIONS[0]]))
     )
 
-    assert hash(Composition(set([CHAMPIONS[0]]))) != hash(
-        Composition(set([CHAMPIONS[1]]))
+    assert hash(Composition(set([ALL_CHAMPIONS[0]]))) != hash(
+        Composition(set([ALL_CHAMPIONS[1]]))
     )
 
 
@@ -17,8 +17,8 @@ def test_hash_permutation():
         Composition(
             set(
                 [
-                    CHAMPIONS[0],
-                    CHAMPIONS[1],
+                    ALL_CHAMPIONS[0],
+                    ALL_CHAMPIONS[1],
                 ]
             )
         )
@@ -26,8 +26,8 @@ def test_hash_permutation():
         Composition(
             set(
                 [
-                    CHAMPIONS[1],
-                    CHAMPIONS[0],
+                    ALL_CHAMPIONS[1],
+                    ALL_CHAMPIONS[0],
                 ]
             )
         )
@@ -35,10 +35,10 @@ def test_hash_permutation():
 
 
 def test_set_membership():
-    s = set([CHAMPIONS[0]])
-    assert CHAMPIONS[0] in s
+    s = set([ALL_CHAMPIONS[0]])
+    assert ALL_CHAMPIONS[0] in s
 
-    new_comp = lambda: Composition(set([CHAMPIONS[0]]))
+    new_comp = lambda: Composition(set([ALL_CHAMPIONS[0]]))
     s = set([new_comp()])
     assert new_comp() in s
 

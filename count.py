@@ -2,7 +2,7 @@ import time
 from functools import cached_property
 from itertools import chain
 
-from data import CHAMPIONS, CHAMPIONS_BY_ID, CHAMPIONS_BY_TRAIT, Champion, Trait
+from data import ALL_CHAMPIONS, CHAMPIONS_BY_ID, CHAMPIONS_BY_TRAIT, Champion, Trait
 from utils import MAX_TEAM_SIZE, dump_comp_data, load_comp_data, print_elapsed
 
 
@@ -69,13 +69,8 @@ def expand_comp(comp: Composition) -> list[Composition]:
     return [comp.add(c) for c in candidates]
 
 
-cache_hits = 0
-
-
 def find_champion_comps(champion: Champion, skip: set[Composition]) -> set[Composition]:
     # Skip gets mutated for efficiency
-
-    global cache_hits
 
     print(champion.name)
 
@@ -86,6 +81,7 @@ def find_champion_comps(champion: Champion, skip: set[Composition]) -> set[Compo
     start = time.time()
     for size in range(2, MAX_TEAM_SIZE + 1):
         update: dict[int, Composition] = dict()
+        cache_hits = 0
 
         for comp in prev.values():
             if comp in skip:
@@ -120,7 +116,7 @@ def main():
 
         comps = set()
         seen = set()
-        for champion in CHAMPIONS:
+        for champion in ALL_CHAMPIONS:
             update = find_champion_comps(champion, seen)
             comps.update(update.values())
 

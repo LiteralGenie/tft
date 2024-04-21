@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from typing import ClassVar
 
 
@@ -7,14 +6,14 @@ class Trait:
 
     id: int
     name: str
-    tiers: list[int]
+    thresholds: list[int]
 
     def __init__(self, name: str, tiers: list[int]):
         self.id = self._NEXT_ID
         self.__class__._NEXT_ID += 1
 
         self.name = name
-        self.tiers = tiers
+        self.thresholds = tiers
 
     def __hash__(self) -> int:
         return self.id
@@ -23,7 +22,7 @@ class Trait:
         return self.name
 
 
-class TRAITS:
+class ALL_TRAITS:
     ALTRUIST = Trait("Altruist", [2, 3, 4])
     ARCANIST = Trait("Arcanist", [2, 4, 6, 8])
     BEHEMOTH = Trait("Behemoth", [2, 4, 6])
@@ -36,8 +35,7 @@ class TRAITS:
 
     FORTUNE = Trait("Fortune", [3, 5])
     GHOSTLY = Trait("Ghostly", [2, 4, 6, 8])
-    # HEAVENLY = Trait("Heavenly", [2, 3, 4, 5, 6, 7])
-    HEAVENLY = Trait("Heavenly", [2, 5, 7])
+    HEAVENLY = Trait("Heavenly", [2, 3, 4, 5, 6, 7])
     INKSHADOW = Trait("Inkshadow", [3, 5, 7])
 
     INVOKER = Trait("Invoker", [2, 4, 6])
@@ -78,8 +76,8 @@ class Champion:
 
 
 # fmt: off
-_T = TRAITS
-CHAMPIONS: list[Champion] = [
+_T = ALL_TRAITS
+ALL_CHAMPIONS: list[Champion] = [
     # 1 costs
     Champion(1, "Ahri", [_T.FATED, _T.ARCANIST]),
     Champion(1, "Caitlyn", [_T.GHOSTLY, _T.SNIPER]),
@@ -151,11 +149,11 @@ CHAMPIONS: list[Champion] = [
 # fmt: on
 
 CHAMPIONS_BY_TRAIT: dict[Trait, set[Champion]] = dict()
-for c in CHAMPIONS:
+for c in ALL_CHAMPIONS:
     for t in c.traits:
         CHAMPIONS_BY_TRAIT.setdefault(t, set())
         CHAMPIONS_BY_TRAIT[t].add(c)
 
-CHAMPIONS_BY_ID: dict[int, Champion] = {c.id: c for c in CHAMPIONS}
+CHAMPIONS_BY_ID: dict[int, Champion] = {c.id: c for c in ALL_CHAMPIONS}
 
-CHAMPIONS_HASH = ",".join(c.name for c in CHAMPIONS)
+CHAMPIONS_HASH = ",".join(c.name for c in ALL_CHAMPIONS)
