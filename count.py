@@ -1,16 +1,8 @@
 import time
 from functools import cached_property
 from itertools import chain
-from pathlib import Path
 
-from data import (
-    CHAMPIONS,
-    CHAMPIONS_BY_ID,
-    CHAMPIONS_BY_TRAIT,
-    CHAMPIONS_HASH,
-    Champion,
-    Trait,
-)
+from data import CHAMPIONS, CHAMPIONS_BY_ID, CHAMPIONS_BY_TRAIT, Champion, Trait
 from utils import MAX_TEAM_SIZE, dump_comp_data, load_comp_data, print_elapsed
 
 
@@ -116,20 +108,21 @@ def find_champion_comps(champion: Champion, skip: set[Composition]) -> set[Compo
 
 
 def main():
-    expected_hash = CHAMPIONS_HASH + "_" + str(MAX_TEAM_SIZE)
-
-    fp_cache = Path("./count.json")
-
-    comps: set[Composition] = load_comp_data(MAX_TEAM_SIZE)
+    comps: set[Composition] = load_comp_data()
     if not comps:
+        answer = input("(y/n) Override? ")
+        if answer.strip().lower() != "y":
+            return
+
         start = time.time()
 
+        comps = set()
         seen = set()
         for champion in CHAMPIONS:
             update = find_champion_comps(champion, seen)
             comps.update(update.values())
 
-        dump_comp_data(comps, MAX_TEAM_SIZE)
+        dump_comp_data(comps)
 
         print_elapsed(start, f"Found {len(comps):,} compositions")
 

@@ -36,7 +36,8 @@ class TRAITS:
 
     FORTUNE = Trait("Fortune", [3, 5])
     GHOSTLY = Trait("Ghostly", [2, 4, 6, 8])
-    HEAVENLY = Trait("Heavenly", [2, 3, 4, 5, 6, 7])
+    # HEAVENLY = Trait("Heavenly", [2, 3, 4, 5, 6, 7])
+    HEAVENLY = Trait("Heavenly", [2, 5, 7])
     INKSHADOW = Trait("Inkshadow", [3, 5, 7])
 
     INVOKER = Trait("Invoker", [2, 4, 6])
@@ -127,6 +128,23 @@ CHAMPIONS: list[Champion] = [
     Champion("Volibear", [_T.INKSHADOW, _T.DUELIST]),
     Champion("Yone", [_T.UMBRAL, _T.REAPER]),
     Champion("Zoe", [_T.FORTUNE, _T.STORYWEAVER, _T.ARCANIST]),
+
+    # 4 costs
+    Champion("Annie", [_T.FORTUNE, _T.INVOKER]),
+    Champion("Ashe", [_T.PORCELAIN, _T.SNIPER]),
+    Champion("Galio", [_T.STORYWEAVER, _T.BRUISER]),
+    Champion("Kai'Sa", [_T.INKSHADOW, _T.TRICKSHOT]),
+
+    Champion("Kayn", [_T.GHOSTLY, _T.REAPER]),
+    Champion("Lee Sin", [_T.DRAGONLORD, _T.DUELIST]),
+    Champion("Lillia", [_T.MYTHIC, _T.INVOKER]),
+    Champion("Morganna", [_T.GHOSTLY, _T.SAGE]),
+
+    Champion("Nautilus", [_T.MYTHIC, _T.WARDEN]),
+    Champion("Ornn", [_T.DRYAD, _T.BEHEMOTH]),
+    Champion("Sylas", [_T.UMBRAL, _T.BRUISER]),
+    Champion("Syndra", [_T.FATED, _T.ARCANIST]),
+
 ]
 # fmt: on
 

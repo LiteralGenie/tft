@@ -49,5 +49,5 @@ def print_by_size_score(size: int, min_score: int):
             print("\t", str(count).rjust(2), t.name)
 
 
-print_size_score_table()
-print_by_size_score(7, 8)
+# print_size_score_table()
+print_by_size_score(6, 6)

@@ -1,5 +1,4 @@
-import json
-import sys
+import pickle
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -15,36 +14,28 @@ def print_elapsed(start: float, *args, **kwargs):
     print(f"[{elapsed:.1f}s]", *args, **kwargs)
 
 
-FP_COMP = Path("./count.json")
+FP_COMP = Path("./count.pkl")
 MAX_TEAM_SIZE = 8
 
 
 def load_comp_data() -> "list[Composition] | None":
-    from count import Composition
-
     expected_hash = CHAMPIONS_HASH + "_" + str(MAX_TEAM_SIZE)
 
+    FP_COMP = Path("./count.pkl")
     if FP_COMP.exists():
-        with open(FP_COMP) as file:
-            data = json.load(file)
+        with open(FP_COMP, "rb") as file:
+            data = pickle.load(file)
 
             if data["hash"] == expected_hash:
-                return [Composition.load(ln) for ln in data["lines"]]
-            else:
-                print("Cache exists but invalid (or outdated) hash")
-                answer = input("(y/n) Override? ")
-                if answer.strip().lower() != "y":
-                    sys.exit()
+                return data["comps"]
 
 
 def dump_comp_data(comps: "set[Composition]"):
     expected_hash = CHAMPIONS_HASH + "_" + str(MAX_TEAM_SIZE)
 
-    with open(FP_COMP, "w") as file:
-        lines = [comp.dump() for comp in comps]
-
+    with open("count.pkl", "wb") as file:
         data = dict(
             hash=expected_hash,
-            lines=lines,
+            comps=comps,
         )
-        json.dump(data, file, indent=2)
+        pickle.dump(data, file)
