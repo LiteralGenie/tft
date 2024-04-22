@@ -90,6 +90,18 @@ def init_db() -> Database:
 
     db.execute(
         """
+        CREATE TABLE IF NOT EXISTS scores_by_trait (
+            id_composition  INTEGER     PRIMARY KEY,
+
+            score           REAL        NOT NULL,
+
+            FOREIGN KEY (id_composition) REFERENCES compositions(id)
+        )
+        """
+    )
+
+    db.execute(
+        """
         CREATE UNIQUE INDEX IF NOT EXISTS hash ON compositions (hash);
         """
     )
@@ -158,17 +170,31 @@ def _init_data(db: Database):
 class DbTrait:
     id: int
     name: str
+    thresholds: list[int]
 
     def __hash__(self) -> int:
         return self.id
 
 
 def get_all_traits(db: Database) -> dict[int, DbTrait]:
-    rows = db.execute("""SELECT id, name FROM traits""").fetchall()
+    rows = db.execute(
+        """
+        SELECT t.id, t.name, GROUP_CONCAT(thresh.threshold) thresholds FROM traits t
+        LEFT JOIN trait_thresholds thresh
+        ON thresh.id_trait = t.id
+        GROUP BY t.id
+        """
+    ).fetchall()
 
-    traits = [DbTrait(**r) for r in rows]
+    traits: dict[int, DbTrait] = dict()
 
-    return {t.id: t for t in traits}
+    for r in rows:
+        thresholds = [int(x) for x in r["thresholds"].split(",")]
+        thresholds.sort()
+
+        traits[r["id"]] = DbTrait(id=r["id"], name=r["name"], thresholds=thresholds)
+
+    return traits
 
 
 @dataclass

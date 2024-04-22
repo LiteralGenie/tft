@@ -11,7 +11,7 @@ from lib.db import (
     init_db,
 )
 
-MAX_TEAM_SIZE = 8
+MAX_TEAM_SIZE = 9
 
 db = init_db()
 ALL_CHAMPIONS = get_all_champions(db)
@@ -120,13 +120,9 @@ def find_comps_to_expand():
 
 
 def main():
-    comp_count = db.execute("SELECT COUNT(*) count FROM compositions").fetchone()[
-        "count"
-    ]
-    if comp_count != 0:
-        print(
-            f"Found {comp_count:,} existing comps in database, skipping initial seed phase"
-        )
+    comp_count = db.execute("SELECT * FROM compositions LIMIT 1").fetchone()
+    if comp_count:
+        print(f"Found existing comps in database, skipping initial seed phase")
     else:
         for champ in ALL_CHAMPIONS.values():
             insert_comp(Composition([champ.id]))
