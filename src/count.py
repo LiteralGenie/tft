@@ -167,7 +167,7 @@ if __name__ == "__main__":
            Postgres might help but probably need to containerize everything first (including devcontainer).
            Also would make testing a pain.
 
-           And just for reference, the db eats up ~40 GB on disk for up to size 8.
+           And just for reference, the db eats up ~40 GB on disk (~10 GB gzipped) for up to size 8.
     """
 
     import cProfile

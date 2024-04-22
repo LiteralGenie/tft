@@ -1,13 +1,7 @@
 from tqdm import tqdm
 
 from lib.composition import Composition
-from lib.db import (
-    DbTrait,
-    get_all_champions,
-    get_all_traits,
-    get_champions_by_trait,
-    init_db,
-)
+from lib.db import DbTrait, get_all_champions, get_all_traits, init_db
 
 db = init_db()
 ALL_CHAMPIONS = get_all_champions(db)
@@ -33,20 +27,23 @@ def init_trait_weights():
         TRAIT_WEIGHTS[trait] = weights
 
     trait = find_trait("Heavenly")
-    weights: list[float] = [0, 1, 0, 1, 0, 1]
+    weights: list[float] = [1, 0, 1, 0, 1, 0]
     # assuming thresholds:  2  3  4  5  6  7
     assign_weight(trait, weights)
 
 
-def find_missing_scores() -> list[int]:
+def find_missing_scores(limit=10_000_000) -> list[int]:
+    # Limit h
     rows = db.execute(
         """
         SELECT c.id
         FROM compositions c
         LEFT JOIN scores_by_trait s
         ON s.id_composition = c.id
-        WHERE s.id_composition IS NULL 
-        """
+        WHERE s.id_composition IS NULL
+        LIMIT ? 
+        """,
+        [limit],
     ).fetchall()
 
     return [r["id"] for r in rows]
@@ -82,9 +79,9 @@ def calc_score(comp: Composition) -> float:
 
     trait_counts = count_traits(comp)
     for trait, count in trait_counts.items():
-        for idx, thresh in enumerate(trait.thresholds):
-            weight_overrides = TRAIT_WEIGHTS.get(trait)
+        weight_overrides = TRAIT_WEIGHTS.get(trait)
 
+        for idx, thresh in enumerate(trait.thresholds):
             if count >= thresh:
                 if not weight_overrides:
                     # No weight override, use default
@@ -93,8 +90,8 @@ def calc_score(comp: Composition) -> float:
                     # Use weight override
                     score += weight_overrides[idx]
                 else:
-                    # Weight overrides exist but this trait count exceeds highest threshold
-                    score += 0
+                    # Weight overrides for trait but not this count (which is larger than max threshold)
+                    break
             else:
                 # Thresholds are in ascending order so we stop checking when one is smaller
                 break
@@ -114,12 +111,21 @@ def insert_score(id_composition: int, score: float):
 
 
 if __name__ == "__main__":
-    missing = find_missing_scores()
+    init_trait_weights()
 
-    for idx, id in enumerate(tqdm(missing)):
-        comp = fetch_comp(id)
-        score = calc_score(comp)
-        insert_score(id, score)
+    while True:
+        # Limit speeds up time-to-first insert (which can take minutes otherwise),
+        # at cost of not knowing how many left
+        missing = find_missing_scores(limit=10_000_000)
+        if not missing:
+            break
 
-        if idx % 100_000 == 0:
-            db.commit()
+        for idx, id in enumerate(tqdm(missing)):
+            comp = fetch_comp(id)
+            score = calc_score(comp)
+            insert_score(id, score)
+
+            if idx % 1_000_000 == 0:
+                db.commit()
+
+    db.commit()
