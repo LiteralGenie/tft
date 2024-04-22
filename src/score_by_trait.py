@@ -1,8 +1,7 @@
 from tqdm import tqdm
 
-from count import Composition
+from lib.composition import Composition
 from lib.db import (
-    DbChampion,
     DbTrait,
     get_all_champions,
     get_all_traits,
@@ -13,7 +12,6 @@ from lib.db import (
 db = init_db()
 ALL_CHAMPIONS = get_all_champions(db)
 ALL_TRAITS = get_all_traits(db)
-CHAMPIONS_BY_TRAIT = get_champions_by_trait(ALL_CHAMPIONS.values())
 
 TRAIT_WEIGHTS: dict[DbTrait, list[float]] = dict()
 

@@ -68,7 +68,8 @@ def init_db() -> Database:
             id              INTEGER     PRIMARY KEY,
 
             hash            TEXT        NOT NULL,
-            is_expanded     BOOLEAN     NOT NULL    DEFAULT 0
+            is_expanded     BOOLEAN     NOT NULL    DEFAULT 0,
+            size            INTEGER     NOT NULL
         )
         """
     )

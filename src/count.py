@@ -1,7 +1,6 @@
-from functools import cached_property
-
 from tqdm import tqdm
 
+from lib.composition import Composition
 from lib.db import (
     DbChampion,
     DbTrait,
@@ -17,28 +16,6 @@ db = init_db()
 ALL_CHAMPIONS = get_all_champions(db)
 ALL_TRAITS = get_all_traits(db)
 CHAMPIONS_BY_TRAIT = get_champions_by_trait(ALL_CHAMPIONS.values())
-
-
-class Composition:
-    ids: list[int]
-
-    def __init__(self, ids: list[int]) -> None:
-        self.ids = ids
-
-    @cached_property
-    def hash(self) -> str:
-        ids_sorted = sorted(self.ids)
-        return ",".join(str(id) for id in ids_sorted)
-
-    def __hash__(self) -> int:
-        return hash(self.hash)
-
-    def add(self, id_champion: int):
-        ids = self.ids.copy() + [id_champion]
-        return Composition(ids)
-
-    def __len__(self):
-        return len(self.ids)
 
 
 def get_comp_traits(comp: Composition) -> set[DbTrait]:
@@ -80,10 +57,11 @@ def insert_comp(comp: Composition):
     id_comp = db.execute(
         """
         INSERT INTO compositions
-            (hash) VALUES (?)
+            (hash, size) VALUES
+            (?, ?)
         RETURNING id;
         """,
-        [comp.hash],
+        [comp.hash, len(comp)],
     ).fetchone()["id"]
 
     db.executemany(
