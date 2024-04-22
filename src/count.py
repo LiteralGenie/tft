@@ -74,18 +74,31 @@ def insert_comp(comp: Composition):
     )
 
 
-def find_comps_to_expand():
+def fetch_comps_to_expand(limit: int | None = 100_000):
+    # @jank: Script seems to exit early without error if too many matching rows
+
+    vals = [MAX_TEAM_SIZE]
+
+    limit_clause = ""
+    if limit and limit > 0:
+        limit_clause = "LIMIT ?" if limit and limit > 0 else ""
+        vals.append(limit)
+
     rows = db.execute(
-        """
+        f"""
         SELECT
             id,
             GROUP_CONCAT(champ.id_champion) id_champs
         FROM compositions comp
         INNER JOIN composition_champions champ
             ON comp.id = champ.id_composition
-        WHERE comp.is_expanded = 0
+        WHERE 
+            comp.is_expanded = 0
+            AND comp.size < ?
         GROUP BY comp.id
-        """
+        {limit_clause}
+        """,
+        vals,
     ).fetchall()
 
     comps = [dict(r) for r in rows]
@@ -107,8 +120,7 @@ def main():
             db.commit()
 
     while True:
-        comps = find_comps_to_expand()
-        comps = [x for x in comps if len(x["comp"]) < MAX_TEAM_SIZE]
+        comps = fetch_comps_to_expand(limit=100_000)
 
         if not comps:
             break
@@ -131,7 +143,7 @@ def main():
                 [db_comp["id"]],
             )
 
-            # This loop runs at ~2500 its / sec as long as
+            # This loop faster (~2500 its / sec) as long as
             # this commit() isn't called too frequently
             if idx % 10_000 == 0:
                 db.commit()
