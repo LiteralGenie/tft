@@ -145,6 +145,19 @@ ALL_CHAMPIONS: list[Champion] = [
     Champion(4, "Sylas", [_T.UMBRAL, _T.BRUISER]),
     Champion(4, "Syndra", [_T.FATED, _T.ARCANIST]),
 
+    # 5 costs
+    Champion(5, "Azir", [_T.DRYAD, _T.INVOKER]),
+    Champion(5, "Hwei", [_T.MYTHIC]),
+    Champion(5, "Irelia", [_T.STORYWEAVER, _T.DUELIST]),
+    Champion(5, "Lissandra", [_T.PORCELAIN, _T.ARCANIST]),
+
+    Champion(5, "Rakan", [_T.DRAGONLORD, _T.ALTRUIST]),
+    Champion(5, "Sett", [_T.FATED, _T.UMBRAL, _T.WARDEN]),
+    Champion(5, "Udyr", [_T.INKSHADOW, _T.BEHEMOTH]),
+    Champion(5, "Wukong", [_T.HEAVENLY, _T.SAGE]),
+
+    Champion(5, "Xayah", [_T.DRAGONLORD, _T.TRICKSHOT]),
+
 ]
 # fmt: on
 
