@@ -67,6 +67,7 @@ def init_db() -> Database:
         CREATE TABLE IF NOT EXISTS compositions (
             id              INTEGER     PRIMARY KEY,
 
+            hash            TEXT        NOT NULL,
             is_expanded     BOOLEAN     NOT NULL    DEFAULT 0
         )
         """
@@ -84,6 +85,12 @@ def init_db() -> Database:
 
             UNIQUE (id_composition, id_champion)
         )
+        """
+    )
+
+    db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS hash ON compositions (hash);
         """
     )
 

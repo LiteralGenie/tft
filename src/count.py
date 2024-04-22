@@ -1,6 +1,6 @@
-import time
 from functools import cached_property
-from typing import Iterable
+
+from tqdm import tqdm
 
 from lib.db import (
     DbChampion,
@@ -12,7 +12,7 @@ from lib.db import (
 )
 from lib.utils import group_by, print_elapsed
 
-MAX_TEAM_SIZE = 8
+MAX_TEAM_SIZE = 6
 
 db = init_db()
 ALL_CHAMPIONS = get_all_champions(db)
@@ -27,12 +27,12 @@ class Composition:
         self.ids = ids
 
     @cached_property
-    def _hash(self) -> int:
+    def hash(self) -> str:
         ids_sorted = sorted(self.ids)
-        return hash(tuple(ids_sorted))
+        return ",".join(str(id) for id in ids_sorted)
 
     def __hash__(self) -> int:
-        return self._hash
+        return hash(self.hash)
 
     def add(self, id_champion: int):
         ids = self.ids.copy() + [id_champion]
@@ -65,49 +65,28 @@ def expand_comp(comp: Composition) -> list[Composition]:
     return [comp.add(c.id) for c in candidates]
 
 
-def find_comps(
-    init: Composition,
-    # Skip gets mutated for efficiency
-    skip: set[Composition],
-) -> set[Composition]:
-    comps: dict[int, Composition] = {hash(init): init}
-    prev: dict[int, Composition] = {hash(init): init}
+def check_exists(comp: Composition) -> bool:
+    hash = ",".join(str(id) for id in sorted(comp.ids))
 
-    iterations = MAX_TEAM_SIZE - len(init)
+    result = db.execute(
+        """
+        SELECT is_expanded FROM compositions
+        WHERE hash = ?
+        """,
+        [hash],
+    ).fetchone()
 
-    start = time.time()
-    for idx in range(iterations):
-        update: dict[int, Composition] = dict()
-        cache_hits = 0
-
-        for cmp in prev.values():
-            if cmp in skip:
-                cache_hits += 1
-                continue
-
-            skip.add(cmp)
-
-            expansions = expand_comp(cmp)
-
-            for expanded in expansions:
-                update[hash(expanded)] = expanded
-                comps[hash(expanded)] = expanded
-
-        prev = update
-        print_elapsed(
-            start,
-            f"Expanded to size {idx + len(init) + 1} with {cache_hits} cache_hits",
-        )
-
-    return set(comps.values())
+    return result != None
 
 
-def insert_comp(ids: Iterable[int]):
+def insert_comp(comp: Composition):
     id_comp = db.execute(
         """
-        INSERT INTO compositions DEFAULT VALUES
+        INSERT INTO compositions
+            (hash) VALUES (?)
         RETURNING id;
-        """
+        """,
+        [comp.hash],
     ).fetchone()["id"]
 
     db.executemany(
@@ -116,8 +95,31 @@ def insert_comp(ids: Iterable[int]):
             (id_composition, id_champion) VALUES
             (?, ?)
         """,
-        [(id_comp, id_champ) for id_champ in ids],
+        [(id_comp, id_champ) for id_champ in comp.ids],
     )
+
+
+def find_comps_to_expand():
+    rows = db.execute(
+        """
+        SELECT
+            id,
+            GROUP_CONCAT(champ.id_champion) id_champs
+        FROM compositions comp
+        INNER JOIN composition_champions champ
+            ON comp.id = champ.id_composition
+        WHERE comp.is_expanded = 0
+        GROUP BY comp.id
+        """
+    ).fetchall()
+
+    comps = [dict(r) for r in rows]
+    for new_comp in comps:
+        new_comp["comp"] = Composition(
+            [int(id) for id in new_comp["id_champs"].split(",")]
+        )
+
+    return comps
 
 
 def main():
@@ -130,58 +132,38 @@ def main():
         )
     else:
         for champ in ALL_CHAMPIONS.values():
-            insert_comp((champ.id,))
+            insert_comp(Composition([champ.id]))
             db.commit()
 
-    rows = db.execute(
-        """
-        SELECT
-            id,
-            comp.is_expanded,
-            GROUP_CONCAT(champ.id_champion) id_champs
-        FROM compositions comp
-        INNER JOIN composition_champions champ
-            ON comp.id = champ.id_composition
-        GROUP BY comp.id
-        """
-    ).fetchall()
+    while True:
+        comps = find_comps_to_expand()
+        if not comps:
+            break
 
-    comps = [dict(r) for r in rows]
-    for new_comp in comps:
-        new_comp["id_champs"] = tuple(
-            int(id) for id in new_comp["id_champs"].split(",")
-        )
+        for db_comp in tqdm(comps):
+            cmp = db_comp["comp"]
 
-    tmp = group_by(comps, lambda c: "to_check" if not c["is_expanded"] else "to_skip")
-    to_check = tmp.get("to_check", [])
-    to_skip: set[Composition] = set(
-        Composition(c["id_champs"]) for c in tmp.get("to_skip", [])
-    )
+            if len(cmp) >= MAX_TEAM_SIZE:
+                continue
 
-    print(f"Found {len(to_check)} comps to expand")
-    for idx, db_comp in enumerate(to_check):
-        comp = Composition(db_comp["id_champs"])
-        champs = [ALL_CHAMPIONS[id].name for id in comp.ids]
+            update = expand_comp(cmp)
 
-        if len(comp) >= MAX_TEAM_SIZE:
-            continue
+            for new_comp in update:
+                if check_exists(new_comp):
+                    continue
 
-        print(f"[{idx} / {len(to_check)}] Expanding comp of size {len(comp)}: {champs}")
-        update = find_comps(comp, to_skip)
+                insert_comp(new_comp)
 
-        for new_comp in update:
-            insert_comp(new_comp.ids)
+            db.execute(
+                """
+                UPDATE compositions
+                SET is_expanded = 1
+                WHERE id = ?
+                """,
+                [db_comp["id"]],
+            )
 
-        db.execute(
-            """
-            UPDATE compositions
-            SET is_expanded = 1
-            WHERE id = ?
-            """,
-            [db_comp["id"]],
-        )
-
-        db.commit()
+            db.commit()
 
 
 if __name__ == "__main__":
