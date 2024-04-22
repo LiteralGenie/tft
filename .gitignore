@@ -1,2 +1,5 @@
+venv/
+
 *.pyc
-db.sqlite
+*.sqlite
+*.sqlite-journal

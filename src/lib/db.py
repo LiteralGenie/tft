@@ -90,7 +90,7 @@ def init_db() -> Database:
 
     db.execute(
         """
-        CREATE INDEX IF NOT EXISTS hash ON compositions (hash);
+        CREATE UNIQUE INDEX IF NOT EXISTS hash ON compositions (hash);
         """
     )
 

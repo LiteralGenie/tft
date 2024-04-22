@@ -10,9 +10,8 @@ from lib.db import (
     get_champions_by_trait,
     init_db,
 )
-from lib.utils import group_by, print_elapsed
 
-MAX_TEAM_SIZE = 6
+MAX_TEAM_SIZE = 8
 
 db = init_db()
 ALL_CHAMPIONS = get_all_champions(db)
@@ -66,14 +65,12 @@ def expand_comp(comp: Composition) -> list[Composition]:
 
 
 def check_exists(comp: Composition) -> bool:
-    hash = ",".join(str(id) for id in sorted(comp.ids))
-
     result = db.execute(
         """
         SELECT is_expanded FROM compositions
         WHERE hash = ?
         """,
-        [hash],
+        [comp.hash],
     ).fetchone()
 
     return result != None
@@ -137,21 +134,18 @@ def main():
 
     while True:
         comps = find_comps_to_expand()
+        comps = [x for x in comps if len(x["comp"]) < MAX_TEAM_SIZE]
+
         if not comps:
             break
 
-        for db_comp in tqdm(comps):
+        for idx, db_comp in enumerate(tqdm(comps)):
             cmp = db_comp["comp"]
 
-            if len(cmp) >= MAX_TEAM_SIZE:
-                continue
-
             update = expand_comp(cmp)
+            update = [cmp for cmp in update if not check_exists(cmp)]
 
             for new_comp in update:
-                if check_exists(new_comp):
-                    continue
-
                 insert_comp(new_comp)
 
             db.execute(
@@ -163,7 +157,12 @@ def main():
                 [db_comp["id"]],
             )
 
-            db.commit()
+            # This loop runs at ~2500 its / sec as long as
+            # this commit() isn't called too frequently
+            if idx % 10_000 == 0:
+                db.commit()
+
+        db.commit()
 
 
 if __name__ == "__main__":
