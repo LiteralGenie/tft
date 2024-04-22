@@ -1,14 +1,8 @@
 from tqdm import tqdm
 
 from lib.composition import Composition
-from lib.db import (
-    DbChampion,
-    DbTrait,
-    get_all_champions,
-    get_all_traits,
-    get_champions_by_trait,
-    init_db,
-)
+from lib.db import (DbChampion, DbTrait, get_all_champions, get_all_traits,
+                    get_champions_by_trait, init_db)
 
 MAX_TEAM_SIZE = 9
 
@@ -74,7 +68,7 @@ def insert_comp(comp: Composition):
     )
 
 
-def fetch_comps_to_expand(limit: int | None = 100_000):
+def fetch_comps_to_expand(limit: int | None = 1_000_000):
     # @jank: Script seems to exit early without error if too many matching rows
 
     vals = [MAX_TEAM_SIZE]
@@ -120,7 +114,7 @@ def main():
             db.commit()
 
     while True:
-        comps = fetch_comps_to_expand(limit=100_000)
+        comps = fetch_comps_to_expand(limit=1_000_000)
 
         if not comps:
             break
@@ -152,6 +146,30 @@ def main():
 
 
 if __name__ == "__main__":
+    """
+    @todo: This script is bottlenecked at 2~2.5k compositions / sec by sqlite stuff.
+           Specifically the check-if-comp-exists and insert-new-comp queries.
+             The existence query is already indexed.
+             Running off a ramdisk doesn't help much (maybe <10% faster)
+           
+           Considering the number of possible comps looks like this
+             size   count
+                1	        60
+                2	       317
+                3	     2,272
+                4	    18,275
+                5	   152,422
+                6    1,260,036
+                7   10,055,919
+                8   76,112,903
+           That is way too slow. That implies it'll take <3 hours to calculate comps of size 8 and another <18 hours for size 9.
+            
+           Postgres might help but probably need to containerize everything first (including devcontainer).
+           Also would make testing a pain.
+
+           And just for reference, the db eats up ~40 GB on disk for up to size 8.
+    """
+
     import cProfile
     from pstats import SortKey
 
