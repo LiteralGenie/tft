@@ -1,8 +1,11 @@
+import time
+from typing import Iterable
+
 import psycopg
 from lib.composition import Composition
 from lib.db import (DbChampion, DbTrait, get_all_champions, get_all_traits,
                     get_champions_by_trait, init_db)
-from lib.utils import batch_queries, to_batch_size
+from lib.utils import batch_queries, print_elapsed, to_batch_size
 from tqdm import tqdm
 
 MAX_TEAM_SIZE = 7
@@ -38,39 +41,35 @@ def expand_comp(comp: Composition) -> list[Composition]:
     return [comp.add(c.id) for c in candidates]
 
 
-def insert_comps(comps: list[Composition], cursor: psycopg.Cursor):
-    comp_insert_batches = batch_queries(
-        comps,
-        to_val=lambda c: '(%s, %s)',
-        to_params=lambda c: (c.hash, len(c))
-    )
-    for batch in comp_insert_batches:
-        cursor.execute(
-            f"""
-            INSERT INTO compositions
-                (id, size) VALUES
-                {batch['vals']}
-            ON CONFLICT DO NOTHING
+def insert_comps(comps: Iterable[Composition], cursor: psycopg.Cursor):
+    start = time.time()
+    to_insert = set()
+    for c in comps:
+        r = cursor.execute(
+            """
+            SELECT COUNT(*) count
+            FROM compositions c
+            WHERE c.id = %s
+            LIMIT 1
             """,
-            batch['params'],
-        )
+            [c.hash]
+        ).fetchone()
 
-    data = [(comp.hash, id_champ) for comp in comps for id_champ in comp.ids]
-    inserts = batch_queries(
-        data,
-        to_val=lambda _: '(%s, %s)',
-        to_params=lambda d: d
-    )
-    for batch in inserts:
-        cursor.execute(
-            f"""
-            INSERT INTO composition_champions
-                (id_composition, id_champion) VALUES
-                {batch['vals']}
-            ON CONFLICT DO NOTHING
-            """,
-            batch['params'],
-        )
+        if r and r['count'] == 0:
+            to_insert.add(c)
+    print_elapsed(start, 'done filtering to_insert')
+
+    comp_data = [(comp.hash, len(comp)) for comp in to_insert]
+    with cursor.copy("COPY compositions (id, size) FROM STDIN") as copy:
+        for d in comp_data:
+            copy.write_row(d)
+    print_elapsed(start, 'done copy comps')
+
+    champ_data = [(comp.hash, id_champ) for comp in to_insert for id_champ in comp.ids]
+    with cursor.copy("COPY composition_champions (id_composition, id_champion) FROM STDIN") as copy:
+        for d in champ_data:
+            copy.write_row(d)
+    print_elapsed(start, 'done copy comp_champs')
 
 
 def fetch_comps_to_expand(limit: int | None = 1_000_000):
@@ -119,20 +118,20 @@ def main():
         db.commit()
 
     while True:
-        missing = fetch_comps_to_expand(limit=None)
+        missing = fetch_comps_to_expand(limit=100_000)
         if not missing:
             break
         
         with tqdm(total=len(missing)) as pbar:
-            comp_batches = to_batch_size(missing, 500)
+            comp_batches = to_batch_size(missing, 2_000)
 
             for comps in comp_batches:
-                to_insert = []
+                to_insert = set()
                 for db_comp in comps:
                     cmp = db_comp["comp"]
 
                     update = expand_comp(cmp)
-                    to_insert.extend(update)
+                    to_insert.update(update)
 
                 with db.transaction():
                     insert_comps(to_insert, cursor)
@@ -150,7 +149,6 @@ def main():
 
                     pbar.update(len(comps))
 
-                    db.commit()
 
 if __name__ == "__main__":
     """
@@ -180,6 +178,6 @@ if __name__ == "__main__":
     import cProfile
     from pstats import SortKey
 
-    # cProfile.run("main()", sort=SortKey.CUMULATIVE)
+    cProfile.run("main()", sort=SortKey.CUMULATIVE)
 
-    main()
+    # main()
