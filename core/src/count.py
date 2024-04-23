@@ -2,9 +2,10 @@ import psycopg
 from lib.composition import Composition
 from lib.db import (DbChampion, DbTrait, get_all_champions, get_all_traits,
                     get_champions_by_trait, init_db)
+from lib.utils import batch_queries, to_batch_size
 from tqdm import tqdm
 
-MAX_TEAM_SIZE = 6
+MAX_TEAM_SIZE = 7
 
 db = init_db()
 cursor = db.cursor()
@@ -38,25 +39,38 @@ def expand_comp(comp: Composition) -> list[Composition]:
 
 
 def insert_comps(comps: list[Composition], cursor: psycopg.Cursor):
-    cursor.executemany(
-        """
-        INSERT INTO compositions
-            (id, size) VALUES
-            (%s, %s)
-        ON CONFLICT DO NOTHING
-        """,
-        [(comp.hash, len(comp)) for comp in comps],
+    comp_insert_batches = batch_queries(
+        comps,
+        to_val=lambda c: '(%s, %s)',
+        to_params=lambda c: (c.hash, len(c))
     )
+    for batch in comp_insert_batches:
+        cursor.execute(
+            f"""
+            INSERT INTO compositions
+                (id, size) VALUES
+                {batch['vals']}
+            ON CONFLICT DO NOTHING
+            """,
+            batch['params'],
+        )
 
-    cursor.executemany(
-        """
-        INSERT INTO composition_champions
-            (id_composition, id_champion) VALUES
-            (%s, %s)
-        ON CONFLICT DO NOTHING
-        """,
-        [(comp.hash, id_champ) for comp in comps for id_champ in comp.ids],
+    data = [(comp.hash, id_champ) for comp in comps for id_champ in comp.ids]
+    inserts = batch_queries(
+        data,
+        to_val=lambda _: '(%s, %s)',
+        to_params=lambda d: d
     )
+    for batch in inserts:
+        cursor.execute(
+            f"""
+            INSERT INTO composition_champions
+                (id_composition, id_champion) VALUES
+                {batch['vals']}
+            ON CONFLICT DO NOTHING
+            """,
+            batch['params'],
+        )
 
 
 def fetch_comps_to_expand(limit: int | None = 1_000_000):
@@ -102,28 +116,41 @@ def main():
         with db.transaction():
             for champ in ALL_CHAMPIONS.values():
                 insert_comps([Composition([champ.id])], cursor)
+        db.commit()
 
     while True:
-        comps = fetch_comps_to_expand(limit=1_000_000)
-
-        if not comps:
+        missing = fetch_comps_to_expand(limit=None)
+        if not missing:
             break
+        
+        with tqdm(total=len(missing)) as pbar:
+            comp_batches = to_batch_size(missing, 500)
 
-        for idx, db_comp in enumerate(tqdm(comps)):
-            cmp = db_comp["comp"]
+            for comps in comp_batches:
+                to_insert = []
+                for db_comp in comps:
+                    cmp = db_comp["comp"]
 
-            update = expand_comp(cmp)
-            insert_comps(update, cursor)
+                    update = expand_comp(cmp)
+                    to_insert.extend(update)
 
-            cursor.execute(
-                """
-                UPDATE compositions
-                SET is_expanded = true
-                WHERE id = %s
-                """,
-                [db_comp["id"]],
-            )
+                with db.transaction():
+                    insert_comps(to_insert, cursor)
 
+                    params = [db_comp['id'] for db_comp in comps]
+                    val = ', '.join('%s' for _ in params)
+                    cursor.execute(
+                        f"""
+                        UPDATE compositions
+                        SET is_expanded = true
+                        WHERE id in ({val})
+                        """,
+                        params,
+                    )
+
+                    pbar.update(len(comps))
+
+                    db.commit()
 
 if __name__ == "__main__":
     """
@@ -153,6 +180,6 @@ if __name__ == "__main__":
     import cProfile
     from pstats import SortKey
 
-    cProfile.run("main()", sort=SortKey.CUMULATIVE)
+    # cProfile.run("main()", sort=SortKey.CUMULATIVE)
 
-    # main()
+    main()
