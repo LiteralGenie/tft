@@ -1,3 +1,4 @@
+import psycopg
 from lib.composition import Composition
 from lib.db import (DbChampion, DbTrait, get_all_champions, get_all_traits,
                     get_champions_by_trait, init_db)
@@ -46,8 +47,8 @@ def check_exists(comp: Composition) -> bool:
     return result != None
 
 
-def insert_comp(comp: Composition):
-    id_comp = db.execute(
+def insert_comp(comp: Composition, cursor: psycopg.Cursor):
+    id_comp = cursor.execute(
         """
         INSERT INTO compositions
             (hash, size) VALUES
@@ -57,15 +58,14 @@ def insert_comp(comp: Composition):
         [comp.hash, len(comp)],
     ).fetchone()["id"]
 
-    for id_champ in comp.ids:
-        db.execute(
-            """
-            INSERT INTO composition_champions
-                (id_composition, id_champion) VALUES
-                (%s, %s)
-            """,
-            [id_comp, id_champ],
-        )
+    cursor.executemany(
+        """
+        INSERT INTO composition_champions
+            (id_composition, id_champion) VALUES
+            (%s, %s)
+        """,
+        [(id_comp, id_champ) for id_champ in comp.ids],
+    )
 
 
 def fetch_comps_to_expand(limit: int | None = 1_000_000):
@@ -119,29 +119,24 @@ def main():
             break
 
         for idx, db_comp in enumerate(tqdm(comps)):
-            cmp = db_comp["comp"]
+            cursor = db.cursor()
+            with db.transaction():
+                cmp = db_comp["comp"]
 
-            update = expand_comp(cmp)
-            update = [cmp for cmp in update if not check_exists(cmp)]
+                update = expand_comp(cmp)
+                update = [cmp for cmp in update if not check_exists(cmp)]
 
-            for new_comp in update:
-                insert_comp(new_comp)
+                for new_comp in update:
+                    insert_comp(new_comp, cursor)
 
-            db.execute(
-                """
-                UPDATE compositions
-                SET is_expanded = true
-                WHERE id = %s
-                """,
-                [db_comp["id"]],
-            )
-
-            # This loop faster (~2500 its / sec) as long as
-            # this commit() isn't called too frequently
-            if idx % 10_000 == 0:
-                db.commit()
-
-        db.commit()
+                cursor.execute(
+                    """
+                    UPDATE compositions
+                    SET is_expanded = true
+                    WHERE id = %s
+                    """,
+                    [db_comp["id"]],
+                )
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ def init_db() -> Database:
     db = psycopg.connect(
         "host=db dbname=postgres user=postgres password=postgres",
         row_factory=dict_row,
+        autocommit=True,
     )
 
     db.execute(
