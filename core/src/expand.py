@@ -1,14 +1,12 @@
 import time
 from dataclasses import dataclass
 from functools import cached_property
-from itertools import chain
 from multiprocessing import Pool
 from typing import Iterable
 
 import psycopg
 from lib.composition import Composition
 from lib.db import (
-    Database,
     DatabaseOrCursor,
     DbChampion,
     DbTrait,
@@ -17,8 +15,7 @@ from lib.db import (
     get_champions_by_trait,
     init_db,
 )
-from lib.utils import print_elapsed, to_batch_size, to_n_batches
-from tqdm import tqdm
+from lib.utils import print_elapsed
 
 MAX_TEAM_SIZE = 8
 
@@ -42,12 +39,6 @@ class ExpandedComp:
     @cached_property
     def hashes(self):
         return [self.source.hash] + [c.hash for c in self.expansions]
-
-    def __hash__(self) -> int:
-        return hash(tuple(self.hashes))
-
-    def __eq__(self, value: object) -> bool:
-        return hash(value) == hash(self)
 
 
 def get_comp_traits(comp: Composition) -> set[DbTrait]:
@@ -109,17 +100,26 @@ def insert_expansions(comps: Iterable[ExpandedComp], cursor: psycopg.Cursor):
             copy.write_row(r)
 
 
-def insert_comp(
-    comp: Composition,
+def insert_comps(comps: Iterable[Composition], cursor: psycopg.Cursor):
+    with cursor.copy("COPY compositions (id, size) FROM STDIN") as copy:
+        for cmp in comps:
+            r = (cmp.hash, len(cmp))
+            copy.write_row(r)
+
+
+def update_is_expanded(
+    comps: Iterable[Composition],
     cursor: psycopg.Cursor,
 ):
+    params = [cmp.hash for cmp in comps]
+    vals = ", ".join("%s" for _ in params)
     cursor.execute(
         f"""
-        UPDATE compositions
+        UPDATE compositions c
         SET is_expanded = true
-        WHERE id = %s
+        WHERE c.id IN ({vals})
         """,
-        [comp.hash],
+        params,
     )
 
 
@@ -162,7 +162,7 @@ def main():
     else:
         with db.transaction():
             for champ in ALL_CHAMPIONS.values():
-                insert_comp(Composition([champ.id]), cursor)
+                insert_comps([Composition([champ.id])], cursor)
         db.commit()
 
     while True:
@@ -174,16 +174,23 @@ def main():
             break
 
         print_elapsed(start, "expanding")
-        to_insert: set[ExpandedComp] = set()
+        expanded_comps: list[ExpandedComp] = list()
         for db_comp in comps:
             cmp = db_comp["comp"]
 
-            expanded = expand_comp(cmp)
-            to_insert.add(expanded)
+            ce = expand_comp(cmp)
+            expanded_comps.append(ce)
 
         print_elapsed(start, "inserting")
         with db.transaction():
-            insert_expansions(to_insert, cursor)
+            to_update = [ce.source for ce in expanded_comps]
+            update_is_expanded(to_update, cursor)
+
+            to_insert = set([cmp for ce in expanded_comps for cmp in ce.expansions])
+            to_insert = {
+                cmp for cmp in to_insert if not check_comp_exists(cmp.hash, cursor)
+            }
+            insert_comps(to_insert, cursor)
 
         elapsed = time.time() - start
         avg = len(comps) / elapsed
