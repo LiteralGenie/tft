@@ -20,16 +20,19 @@ RUN apt install -y curl
 RUN curl -fsSL https://deb.nodesource.com/setup_21.x | bash - && apt-get install -y nodejs
 
 # python venv
-#   create it here before copying source code so that
+#   create it here before copying our code so that
 #   we don't need to reinstall deps after every change
+RUN mkdir core
+WORKDIR /app/core
 RUN python3.12 -m venv venv
 COPY ./core/requirements.txt .
 RUN ./venv/bin/python -m pip install -r requirements.txt
-RUN rm requirements.txt
+WORKDIR /app
 
 ### DEV ###
 
 FROM base AS dev
-COPY . .
 
-RUN mv /app/venv /app/core/venv
+RUN apt install -y postgresql-client
+
+COPY . .

@@ -6,6 +6,11 @@
 
     "python.analysis.autoImportCompletions": true,
     "python.analysis.typeCheckingMode": "basic",
+    "[python]": {
+        "editor.wordBasedSuggestions": "off",
+        "editor.defaultFormatter": "ms-python.black-formatter",
+        "editor.formatOnSave": true,
+      },
     
     "[typescript]": {
         "editor.defaultFormatter": "esbenp.prettier-vscode"

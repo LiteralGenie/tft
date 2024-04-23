@@ -1,22 +1,24 @@
-import sqlite3
 from dataclasses import dataclass
 from typing import Iterable, TypeAlias, cast
 
+import psycopg
 from data._champions import ALL_CHAMPIONS, ALL_TRAITS, Trait
 from lib.config import DB_FILE
+from psycopg.rows import dict_row
 
-Database: TypeAlias = sqlite3.Connection
+Database: TypeAlias = psycopg.Connection
 
 
 def init_db() -> Database:
-    db = sqlite3.connect(DB_FILE)
-
-    db.row_factory = sqlite3.Row
+    db = psycopg.connect(
+        "host=db dbname=postgres user=postgres password=postgres",
+        row_factory=dict_row,
+    )
 
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS champions (
-            id          INTEGER     PRIMARY KEY,
+            id          SERIAL      PRIMARY KEY,
 
             cost        INTEGER     NOT NULL,
             name        TEXT        NOT NULL,
@@ -29,7 +31,7 @@ def init_db() -> Database:
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS traits (
-            id      INTEGER     PRIMARY KEY,
+            id      SERIAL      PRIMARY KEY,
 
             name    TEXT        NOT NULL
         )
@@ -39,7 +41,7 @@ def init_db() -> Database:
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS trait_thresholds (
-            id          INTEGER     PRIMARY KEY,
+            id          SERIAL      PRIMARY KEY,
             id_trait    INTEGER     NOT NULL,
 
             threshold   INTEGER     NOT NULL,
@@ -67,10 +69,10 @@ def init_db() -> Database:
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS compositions (
-            id              INTEGER     PRIMARY KEY,
+            id              SERIAL      PRIMARY KEY,
 
             hash            TEXT        NOT NULL,
-            is_expanded     BOOLEAN     NOT NULL    DEFAULT 0,
+            is_expanded     BOOLEAN     NOT NULL    DEFAULT false,
             size            INTEGER     NOT NULL
         )
         """
@@ -129,7 +131,7 @@ def _init_data(db: Database):
                 """
                     INSERT INTO traits 
                         (id, name) VALUES
-                        (?, ?)
+                        (%s, %s)
                 """,
                 [trait.id, trait.name],
             )
@@ -139,7 +141,7 @@ def _init_data(db: Database):
                     """
                         INSERT INTO trait_thresholds
                             (id_trait, threshold) VALUES
-                            (?, ?)
+                            (%s, %s)
                     """,
                     [trait.id, thresh],
                 )
@@ -153,7 +155,7 @@ def _init_data(db: Database):
                 """
                 INSERT INTO CHAMPIONS
                     (id, cost, name, range, uses_ap) VALUES
-                    (?, ?, ?, ?, ?)
+                    (%s, %s, %s, %s, %s)
                 """,
                 [ch.id, ch.cost, ch.name, ch.range, ch.uses_ap],
             )
@@ -163,7 +165,7 @@ def _init_data(db: Database):
                     """
                     INSERT INTO champion_traits
                         (id_champion, id_trait) VALUES
-                        (?, ?)
+                        (%s, %s)
                     """,
                     [ch.id, trait.id],
                 )

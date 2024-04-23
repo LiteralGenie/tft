@@ -2,12 +2,14 @@
     "customizations": {
       "vscode": {
         "extensions": [
-          "ms-azuretools.vscode-docker",
-          "eamodio.gitlens",
-          "esbenp.prettier-vscode",
-          "svelte.svelte-vscode",
-          "ms-python.python",
-          "ms-python.debugpy"
+            "ms-azuretools.vscode-docker",
+            "eamodio.gitlens",
+            "esbenp.prettier-vscode",
+            "svelte.svelte-vscode",
+            "ms-python.python",
+            "ms-python.debugpy",
+            "ms-python.black-formatter",
+            "ms-python.isort"
         ],
 
         "settings": {
@@ -19,6 +21,10 @@
     },
   
     "remoteUser": "root",
+
+    "remoteEnv": {
+      "PYTHONPATH": "/app/core/src"
+    },
   
     "dockerComposeFile": ["../docker-compose.yml", "./docker-compose.dev.yml"],
   
