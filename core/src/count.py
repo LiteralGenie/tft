@@ -47,24 +47,25 @@ def check_exists(comp: Composition) -> bool:
     return result != None
 
 
-def insert_comp(comp: Composition, cursor: psycopg.Cursor):
-    id_comp = cursor.execute(
+def insert_comps(comps: list[Composition], cursor: psycopg.Cursor):
+    cursor.executemany(
         """
         INSERT INTO compositions
-            (hash, size) VALUES
+            (id, size) VALUES
             (%s, %s)
-        RETURNING id;
+        ON CONFLICT DO NOTHING
         """,
-        [comp.hash, len(comp)],
-    ).fetchone()["id"]
+        [(comp.hash, len(comp)) for comp in comps],
+    )
 
     cursor.executemany(
         """
         INSERT INTO composition_champions
             (id_composition, id_champion) VALUES
             (%s, %s)
+        ON CONFLICT DO NOTHING
         """,
-        [(id_comp, id_champ) for id_champ in comp.ids],
+        [(comp.hash, id_champ) for comp in comps for id_champ in comp.ids],
     )
 
 
@@ -109,7 +110,7 @@ def main():
         print(f"Found existing comps in database, skipping initial seed phase")
     else:
         for champ in ALL_CHAMPIONS.values():
-            insert_comp(Composition([champ.id]))
+            insert_comps([Composition([champ.id])], db.cursor())
             db.commit()
 
     while True:
@@ -124,10 +125,8 @@ def main():
                 cmp = db_comp["comp"]
 
                 update = expand_comp(cmp)
-                update = [cmp for cmp in update if not check_exists(cmp)]
-
-                for new_comp in update:
-                    insert_comp(new_comp, cursor)
+                # update = [cmp for cmp in update if not check_exists(cmp)]
+                insert_comps(update, db.cursor())
 
                 cursor.execute(
                     """

@@ -70,9 +70,8 @@ def init_db() -> Database:
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS compositions (
-            id              SERIAL      PRIMARY KEY,
+            id              TEXT        PRIMARY KEY,
 
-            hash            TEXT        NOT NULL,
             is_expanded     BOOLEAN     NOT NULL    DEFAULT false,
             size            INTEGER     NOT NULL
         )
@@ -82,7 +81,7 @@ def init_db() -> Database:
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS composition_champions (
-            id_composition      INTEGER     NOT NULL,
+            id_composition      TEXT        NOT NULL,
             id_champion         INTEGER     NOT NULL,
 
             FOREIGN KEY (id_composition) REFERENCES compositions(id),
@@ -97,18 +96,12 @@ def init_db() -> Database:
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS scores_by_trait (
-            id_composition  INTEGER     PRIMARY KEY,
+            id_composition      TEXT        PRIMARY KEY,
 
-            score           REAL        NOT NULL,
+            score               REAL        NOT NULL,
 
             FOREIGN KEY (id_composition) REFERENCES compositions(id)
         )
-        """
-    )
-
-    db.execute(
-        """
-        CREATE UNIQUE INDEX IF NOT EXISTS hash ON compositions (hash);
         """
     )
 
