@@ -184,21 +184,14 @@ class DbTrait:
 def get_all_traits(db: Database) -> dict[int, DbTrait]:
     rows = db.execute(
         """
-        SELECT t.id, t.name, GROUP_CONCAT(thresh.threshold) thresholds FROM traits t
+        SELECT t.id, t.name, ARRAY_AGG(thresh.threshold) thresholds FROM traits t
         LEFT JOIN trait_thresholds thresh
         ON thresh.id_trait = t.id
         GROUP BY t.id
         """
     ).fetchall()
 
-    traits: dict[int, DbTrait] = dict()
-
-    for r in rows:
-        thresholds = [int(x) for x in r["thresholds"].split(",")]
-        thresholds.sort()
-
-        traits[r["id"]] = DbTrait(id=r["id"], name=r["name"], thresholds=thresholds)
-
+    traits: dict[int, DbTrait] = {r["id"]: DbTrait(**r) for r in rows}
     return traits
 
 
@@ -217,18 +210,13 @@ class DbChampion:
 def get_all_champions(db: Database) -> dict[int, DbChampion]:
     rows = db.execute(
         """
-        SELECT c.id, c.cost, c.name, GROUP_CONCAT(t.id_trait) as traits FROM champions c
+        SELECT c.id, c.cost, c.name, ARRAY_AGG(t.id_trait) as traits FROM champions c
         LEFT JOIN champion_traits t ON t.id_champion = c.id
         GROUP BY c.id 
         """
     ).fetchall()
 
-    champions: list[DbChampion] = []
-    for r in rows:
-        data = dict(r)
-        data["traits"] = [int(id) for id in data["traits"].split(",")]
-        champions.append(DbChampion(**data))
-
+    champions: list[DbChampion] = [DbChampion(**r) for r in rows]
     return {c.id: c for c in champions}
 
 

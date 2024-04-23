@@ -38,7 +38,7 @@ def check_exists(comp: Composition) -> bool:
     result = db.execute(
         """
         SELECT is_expanded FROM compositions
-        WHERE hash = ?
+        WHERE hash = %s
         """,
         [comp.hash],
     ).fetchone()
@@ -51,20 +51,21 @@ def insert_comp(comp: Composition):
         """
         INSERT INTO compositions
             (hash, size) VALUES
-            (?, ?)
+            (%s, %s)
         RETURNING id;
         """,
         [comp.hash, len(comp)],
     ).fetchone()["id"]
 
-    db.executemany(
-        """
-        INSERT INTO composition_champions
-            (id_composition, id_champion) VALUES
-            (?, ?)
-        """,
-        [(id_comp, id_champ) for id_champ in comp.ids],
-    )
+    for id_champ in comp.ids:
+        db.execute(
+            """
+            INSERT INTO composition_champions
+                (id_composition, id_champion) VALUES
+                (%s, %s)
+            """,
+            [id_comp, id_champ],
+        )
 
 
 def fetch_comps_to_expand(limit: int | None = 1_000_000):
@@ -74,31 +75,30 @@ def fetch_comps_to_expand(limit: int | None = 1_000_000):
 
     limit_clause = ""
     if limit and limit > 0:
-        limit_clause = "LIMIT ?" if limit and limit > 0 else ""
+        limit_clause = "LIMIT %s" if limit and limit > 0 else ""
         vals.append(limit)
 
     rows = db.execute(
         f"""
         SELECT
             id,
-            GROUP_CONCAT(champ.id_champion) id_champs
+            ARRAY_AGG(champ.id_champion) id_champs
         FROM compositions comp
         INNER JOIN composition_champions champ
             ON comp.id = champ.id_composition
         WHERE 
-            comp.is_expanded = 0
-            AND comp.size < ?
+            comp.is_expanded = false
+            AND comp.size < %s
         GROUP BY comp.id
         {limit_clause}
         """,
         vals,
     ).fetchall()
 
-    comps = [dict(r) for r in rows]
-    for new_comp in comps:
-        new_comp["comp"] = Composition(
-            [int(id) for id in new_comp["id_champs"].split(",")]
-        )
+    comps = [
+        dict(**r, comp=Composition(r['id_champs']))
+        for r in rows
+    ]
 
     return comps
 
@@ -130,8 +130,8 @@ def main():
             db.execute(
                 """
                 UPDATE compositions
-                SET is_expanded = 1
-                WHERE id = ?
+                SET is_expanded = true
+                WHERE id = %s
                 """,
                 [db_comp["id"]],
             )
