@@ -1,0 +1,39 @@
+{
+    "customizations": {
+      "vscode": {
+        "extensions": [
+          "ms-azuretools.vscode-docker",
+          "eamodio.gitlens",
+          "esbenp.prettier-vscode",
+          "svelte.svelte-vscode",
+          "ms-python.python",
+          "ms-python.debugpy"
+        ],
+
+        "settings": {
+          "python.defaultInterpreterPath": "/app/core/venv/bin/python",
+          // @fixme: venvs dont autoactivate in new terminals
+          "python.terminal.activateEnvironment": true
+        }
+      }
+    },
+  
+    "remoteUser": "root",
+  
+    "dockerComposeFile": ["../docker-compose.yml", "./docker-compose.dev.yml"],
+  
+    "service": "dev",
+  
+    "workspaceFolder": "/app",
+  
+    "features": {
+      "ghcr.io/devcontainers/features/git:1": {}
+    },
+  
+    // This is post-attach instead of postCreate because of
+    // https://github.com/microsoft/vscode-remote-release/issues/6810#issuecomment-1449807170
+    "postAttachCommand": "git config --global --add safe.directory /app",
+  
+    "postStartCommand": "bash /app/.devcontainer/post_start.sh"
+  }
+  
