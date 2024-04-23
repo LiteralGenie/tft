@@ -2,13 +2,12 @@
 
 FROM ubuntu:22.04 as base
 WORKDIR /app
+
+ARG DEBIAN_FRONTEND=noninteractive
 RUN apt update
 
 # misc
 RUN apt install screen -y
-
-# postgres
-RUN DEBIAN_FRONTEND=noninteractive apt install -y postgresql
 
 # python
 RUN apt install software-properties-common -y
