@@ -68,36 +68,14 @@ def expand_comp(comp: Composition) -> ExpandedComp:
 def check_comp_exists(hash: str, cursor: DatabaseOrCursor) -> bool:
     r = cursor.execute(
         """
-        SELECT COUNT(*) count
+        SELECT 1
         FROM compositions c
         WHERE c.id = %s
-        LIMIT 1
         """,
         [hash],
     ).fetchone()
 
-    return bool(r) and r["count"] == 1
-
-
-def insert_expansions(comps: Iterable[ExpandedComp], cursor: psycopg.Cursor):
-    to_update = [ce.source for ce in comps]
-    params = [cmp.hash for cmp in to_update]
-    vals = ", ".join("%s" for _ in params)
-    cursor.execute(
-        f"""
-        UPDATE compositions c
-        SET is_expanded = true
-        WHERE c.id IN ({vals})
-        """,
-        params,
-    )
-
-    to_insert = set([cmp for ce in comps for cmp in ce.expansions])
-    to_insert = {cmp for cmp in to_insert if not check_comp_exists(cmp.hash, cursor)}
-    with cursor.copy("COPY compositions (id, size) FROM STDIN") as copy:
-        for cmp in to_insert:
-            r = (cmp.hash, len(cmp))
-            copy.write_row(r)
+    return bool(r)
 
 
 def insert_comps(comps: Iterable[Composition], cursor: psycopg.Cursor):
