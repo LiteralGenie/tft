@@ -9,6 +9,7 @@ import psycopg
 from lib.composition import Composition
 from lib.db import (
     Database,
+    DatabaseOrCursor,
     DbChampion,
     DbTrait,
     get_all_champions,
@@ -20,6 +21,10 @@ from lib.utils import print_elapsed, to_batch_size, to_n_batches
 from tqdm import tqdm
 
 MAX_TEAM_SIZE = 8
+
+# PG uses really shitty query plans if this is any larger
+# eg ~300ms for LIMIT 10_000 vs ~30_000ms for LIMIT 20_000
+COMPS_PER_ITERATION = 10_000
 
 db = init_db()
 cursor = db.cursor()
@@ -69,42 +74,43 @@ def expand_comp(comp: Composition) -> ExpandedComp:
     return ExpandedComp(source=comp, expansions=expansions)
 
 
-def insert_comps(comps: Iterable[Composition], cursor: psycopg.Cursor):
-    start = time.time()
-    to_insert = set()
-    for c in comps:
-        r = cursor.execute(
-            """
-            SELECT COUNT(*) count
-            FROM compositions c
-            WHERE c.id = %s
-            LIMIT 1
-            """,
-            [c.hash],
-        ).fetchone()
+def check_comp_exists(hash: str, cursor: DatabaseOrCursor) -> bool:
+    r = cursor.execute(
+        """
+        SELECT COUNT(*) count
+        FROM compositions c
+        WHERE c.id = %s
+        LIMIT 1
+        """,
+        [hash],
+    ).fetchone()
 
-        if r and r["count"] == 0:
-            to_insert.add(c)
-    # print_elapsed(start, f"{len(to_insert)} done filtering to_insert")
+    return bool(r) and r["count"] == 1
 
-    comp_data = [(comp.hash, len(comp)) for comp in to_insert]
+
+def insert_expansions(comps: Iterable[ExpandedComp], cursor: psycopg.Cursor):
+    to_update = [ce.source for ce in comps]
+    params = [cmp.hash for cmp in to_update]
+    vals = ", ".join("%s" for _ in params)
+    cursor.execute(
+        f"""
+        UPDATE compositions c
+        SET is_expanded = true
+        WHERE c.id IN ({vals})
+        """,
+        params,
+    )
+
+    to_insert = set([cmp for ce in comps for cmp in ce.expansions])
+    to_insert = {cmp for cmp in to_insert if not check_comp_exists(cmp.hash, cursor)}
     with cursor.copy("COPY compositions (id, size) FROM STDIN") as copy:
-        for d in comp_data:
-            copy.write_row(d)
-    # print_elapsed(start, "done copy comps")
-
-    champ_data = [(comp.hash, id_champ) for comp in to_insert for id_champ in comp.ids]
-    with cursor.copy(
-        "COPY composition_champions (id_composition, id_champion) FROM STDIN"
-    ) as copy:
-        for d in champ_data:
-            copy.write_row(d)
-    # print_elapsed(start, "done copy comp_champs")
+        for cmp in to_insert:
+            r = (cmp.hash, len(cmp))
+            copy.write_row(r)
 
 
 def insert_comp(
-    source: Composition,
-    expansions: Iterable[Composition],
+    comp: Composition,
     cursor: psycopg.Cursor,
 ):
     cursor.execute(
@@ -113,61 +119,11 @@ def insert_comp(
         SET is_expanded = true
         WHERE id = %s
         """,
-        [source.hash],
+        [comp.hash],
     )
-
-    # return
-
-    to_insert = set()
-    for c in expansions:
-        r = cursor.execute(
-            """
-            SELECT COUNT(*) count
-            FROM compositions c
-            WHERE c.id = %s
-            LIMIT 1
-            """,
-            [c.hash],
-        ).fetchone()
-
-        if r and r["count"] == 0:
-            to_insert.add(c)
-
-    with cursor.copy("COPY compositions (id, size) FROM STDIN") as copy:
-        for comp in to_insert:
-            d = (comp.hash, len(comp))
-            copy.write_row(d)
-
-    champ_data = [(comp.hash, id_champ) for comp in to_insert for id_champ in comp.ids]
-    with cursor.copy(
-        "COPY composition_champions (id_composition, id_champion) FROM STDIN"
-    ) as copy:
-        for d in champ_data:
-            copy.write_row(d)
-
-
-def init_worker():
-    global db, cursor
-    db = init_db()
-    cursor = db.cursor()
-
-
-def insert_expansions(updates: list[ExpandedComp]):
-    # print("starting insert")
-
-    with db.transaction():
-        for x in updates:
-            insert_comp(x.source, x.expansions, cursor)
-
-        # exps = list(chain(*[x.expansions for x in updates]))
-        # insert_comps(exps, cursor)
-
-    return len(updates)
 
 
 def fetch_comps_to_expand(limit: int | None = 1_000_000):
-    # @jank: Script seems to exit early without error if too many matching rows
-
     vals = [MAX_TEAM_SIZE]
     limit_clause = ""
     if limit and limit > 0:
@@ -199,75 +155,39 @@ def fetch_comps_to_expand(limit: int | None = 1_000_000):
     return comps
 
 
-def create_batch(updates: set[ExpandedComp], size: int) -> list[ExpandedComp]:
-    comps = iter(updates)
-
-    batch = [next(comps)]
-    hashes_in_batch = set([*batch[0].hashes])
-
-    for c in comps:
-        if len(batch) >= size:
-            break
-
-        if not hashes_in_batch.isdisjoint(c.hashes):
-            continue
-
-        batch.append(c)
-        hashes_in_batch.update(c.hashes)
-
-    for c in batch:
-        updates.remove(c)
-
-    return batch
-
-
 def main():
-    init_worker()
-
-    comp_count = db.execute("SELECT * FROM compositions LIMIT 1").fetchone()
-    if comp_count:
+    has_comps = db.execute("SELECT * FROM compositions LIMIT 1").fetchone()
+    if has_comps:
         print(f"Found existing comps in database, skipping initial seed phase")
     else:
         with db.transaction():
             for champ in ALL_CHAMPIONS.values():
-                insert_comps([Composition([champ.id])], cursor)
+                insert_comp(Composition([champ.id]), cursor)
         db.commit()
 
-    n_workers = 4
-    comps_per_it = 10_000
+    while True:
+        start = time.time()
 
-    with Pool(
-        n_workers,
-        initializer=init_worker,
-    ) as pool:
-        while True:
-            with tqdm(total=comps_per_it, smoothing=0) as pbar:
-                print("fetching comps")
-                comps = fetch_comps_to_expand(limit=comps_per_it)
-                if not comps:
-                    break
+        print_elapsed(start, "fetching comps")
+        comps = fetch_comps_to_expand(limit=COMPS_PER_ITERATION)
+        if not comps:
+            break
 
-                print("expanding")
-                to_insert: set[ExpandedComp] = set()
-                for db_comp in comps:
-                    cmp = db_comp["comp"]
+        print_elapsed(start, "expanding")
+        to_insert: set[ExpandedComp] = set()
+        for db_comp in comps:
+            cmp = db_comp["comp"]
 
-                    expanded = expand_comp(cmp)
-                    to_insert.add(expanded)
+            expanded = expand_comp(cmp)
+            to_insert.add(expanded)
 
-                while True:
-                    if not to_insert:
-                        break
+        print_elapsed(start, "inserting")
+        with db.transaction():
+            insert_expansions(to_insert, cursor)
 
-                    print("creating batches")
-                    batch = create_batch(to_insert, 10_000)
-
-                    sub_batches = to_n_batches(batch, n_workers)
-
-                    print("inserting")
-                    for count in pool.imap_unordered(insert_expansions, sub_batches):
-                        pbar.update(count)
-                        pbar.refresh()
+        elapsed = time.time() - start
+        avg = len(comps) / elapsed
+        print_elapsed(start, f"done ({avg:.1f} it/s)")
 
 
 if __name__ == "__main__":
