@@ -16,10 +16,12 @@ def init_db() -> Database:
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS champions (
-            id      INTEGER     PRIMARY KEY,
+            id          INTEGER     PRIMARY KEY,
 
-            cost    INTEGER     NOT NULL,
-            name    TEXT        NOT NULL
+            cost        INTEGER     NOT NULL,
+            name        TEXT        NOT NULL,
+            range       INTEGER     NOT NULL,
+            uses_ap     BOOLEAN     NOT NULL
         )
         """
     )
@@ -146,24 +148,24 @@ def _init_data(db: Database):
         "count"
     ]
     if champ_rows == 0:
-        for champion in ALL_CHAMPIONS:
+        for ch in ALL_CHAMPIONS:
             db.execute(
                 """
                 INSERT INTO CHAMPIONS
-                    (id, cost, name) VALUES
-                    (?, ?, ?)
+                    (id, cost, name, range, uses_ap) VALUES
+                    (?, ?, ?, ?, ?)
                 """,
-                [champion.id, champion.cost, champion.name],
+                [ch.id, ch.cost, ch.name, ch.range, ch.uses_ap],
             )
 
-            for trait in champion.traits:
+            for trait in ch.traits:
                 db.execute(
                     """
                     INSERT INTO champion_traits
                         (id_champion, id_trait) VALUES
                         (?, ?)
                     """,
-                    [champion.id, trait.id],
+                    [ch.id, trait.id],
                 )
 
 

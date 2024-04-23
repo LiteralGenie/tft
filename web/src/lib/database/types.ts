@@ -19,6 +19,8 @@ export interface ChampionsTable {
 
     cost: SqliteInteger
     name: string
+    range: SqliteInteger
+    uses_ap: SqliteBool
 }
 
 export interface TraitsTable {

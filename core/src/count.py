@@ -1,10 +1,9 @@
-from tqdm import tqdm
-
 from lib.composition import Composition
 from lib.db import (DbChampion, DbTrait, get_all_champions, get_all_traits,
                     get_champions_by_trait, init_db)
+from tqdm import tqdm
 
-MAX_TEAM_SIZE = 9
+MAX_TEAM_SIZE = 6
 
 db = init_db()
 ALL_CHAMPIONS = get_all_champions(db)

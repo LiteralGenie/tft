@@ -1,5 +1,7 @@
 from typing import ClassVar
 
+# @todo: Move this to config file
+
 
 class Trait:
     _NEXT_ID: ClassVar[int] = 0
@@ -58,15 +60,26 @@ class Champion:
     id: int
     cost: int
     name: str
+    range: int
     traits: list[Trait]
+    uses_ap: bool
 
-    def __init__(self, cost: int, name: str, traits: list[Trait]):
+    def __init__(
+        self,
+        cost: int,
+        name: str,
+        traits: list[Trait],
+        range: int,
+        uses_ap: bool,
+    ):
         self.id = self._NEXT_ID
         self.__class__._NEXT_ID += 1
 
         self.cost = cost
         self.name = name
         self.traits = traits
+        self.range = range
+        self.uses_ap = uses_ap
 
     def __hash__(self) -> int:
         return self.id
@@ -79,84 +92,84 @@ class Champion:
 _T = ALL_TRAITS
 ALL_CHAMPIONS: list[Champion] = [
     # 1 costs
-    Champion(1, "Ahri", [_T.FATED, _T.ARCANIST]),
-    Champion(1, "Caitlyn", [_T.GHOSTLY, _T.SNIPER]),
-    Champion(1, "Cho'Gath", [_T.MYTHIC, _T.BEHEMOTH]),
-    Champion(1, "Darius", [_T.UMBRAL, _T.DUELIST]),
+    Champion(1, "Ahri", [_T.FATED, _T.ARCANIST], 4, True),
+    Champion(1, "Caitlyn", [_T.GHOSTLY, _T.SNIPER], 4, False),
+    Champion(1, "Cho'Gath", [_T.MYTHIC, _T.BEHEMOTH], 1, True),
+    Champion(1, "Darius", [_T.UMBRAL, _T.DUELIST], 1, True),
 
-    Champion(1, "Kobuko", [_T.FORTUNE, _T.BRUISER]),
-    Champion(1, "Garen", [_T.STORYWEAVER, _T.WARDEN]),
-    Champion(1, "Jax", [_T.INKSHADOW, _T.WARDEN]),
-    Champion(1, "Kha'Zix", [_T.HEAVENLY, _T.REAPER]),
+    Champion(1, "Kobuko", [_T.FORTUNE, _T.BRUISER], 1, True),
+    Champion(1, "Garen", [_T.STORYWEAVER, _T.WARDEN], 1, False),
+    Champion(1, "Jax", [_T.INKSHADOW, _T.WARDEN], 1, False),
+    Champion(1, "Kha'Zix", [_T.HEAVENLY, _T.REAPER], 1, False),
 
-    Champion(1, "Kog'Maw", [_T.MYTHIC, _T.INVOKER, _T.SNIPER]),
-    Champion(1, "Malphite", [_T.HEAVENLY, _T.BEHEMOTH]),
-    Champion(1, "Rek'Sai", [_T.DRYAD, _T.BRUISER]),
-    Champion(1, "Sivir", [_T.STORYWEAVER, _T.TRICKSHOT]),
+    Champion(1, "Kog'Maw", [_T.MYTHIC, _T.INVOKER, _T.SNIPER], 4, False),
+    Champion(1, "Malphite", [_T.HEAVENLY, _T.BEHEMOTH], 1, False),
+    Champion(1, "Rek'Sai", [_T.DRYAD, _T.BRUISER], 1, False),
+    Champion(1, "Sivir", [_T.STORYWEAVER, _T.TRICKSHOT], 4, False),
 
-    Champion(1, "Yasuo", [_T.FATED, _T.DUELIST]),
+    Champion(1, "Yasuo", [_T.FATED, _T.DUELIST], 1, False),
 
     # 2 costs
-    Champion(2, "Aatrox", [_T.GHOSTLY, _T.INKSHADOW, _T.BRUISER]),
-    Champion(2, "Gnar", [_T.DRYAD, _T.WARDEN]),
-    Champion(2, "Janna", [_T.DRAGONLORD, _T.INVOKER]),
-    Champion(2, "Kindred", [_T.FATED, _T.DRYAD, _T.REAPER]),
+    Champion(2, "Aatrox", [_T.GHOSTLY, _T.INKSHADOW, _T.BRUISER], 1, False),
+    Champion(2, "Gnar", [_T.DRYAD, _T.WARDEN], 1, False),
+    Champion(2, "Janna", [_T.DRAGONLORD, _T.INVOKER], 4, False),
+    Champion(2, "Kindred", [_T.FATED, _T.DRYAD, _T.REAPER], 4, False),
 
-    Champion(2, "Lux", [_T.PORCELAIN, _T.ARCANIST]),
-    Champion(2, "Neeko", [_T.MYTHIC, _T.HEAVENLY, _T.ARCANIST]),
-    Champion(2, "Qiyana", [_T.HEAVENLY, _T.DUELIST]),
-    Champion(2, "Riven", [_T.STORYWEAVER, _T.ALTRUIST, _T.BRUISER]),
+    Champion(2, "Lux", [_T.PORCELAIN, _T.ARCANIST], 4, False),
+    Champion(2, "Neeko", [_T.MYTHIC, _T.HEAVENLY, _T.ARCANIST], 1, False),
+    Champion(2, "Qiyana", [_T.HEAVENLY, _T.DUELIST], 1, False),
+    Champion(2, "Riven", [_T.STORYWEAVER, _T.ALTRUIST, _T.BRUISER], 1, False),
 
-    Champion(2, "Senna", [_T.INKSHADOW, _T.SNIPER]),
-    Champion(2, "Shen", [_T.GHOSTLY, _T.BEHEMOTH]),
-    Champion(2, "Teemo", [_T.FORTUNE, _T.TRICKSHOT]),
-    Champion(2, "Yorick", [_T.UMBRAL, _T.BEHEMOTH]),
+    Champion(2, "Senna", [_T.INKSHADOW, _T.SNIPER], 1, False),
+    Champion(2, "Shen", [_T.GHOSTLY, _T.BEHEMOTH], 1, False),
+    Champion(2, "Teemo", [_T.FORTUNE, _T.TRICKSHOT], 4, False),
+    Champion(2, "Yorick", [_T.UMBRAL, _T.BEHEMOTH], 1, False),
     
-    Champion(2, "Zyra", [_T.STORYWEAVER, _T.SAGE]),
+    Champion(2, "Zyra", [_T.STORYWEAVER, _T.SAGE], 4, False),
 
     # 3 costs
-    Champion(3, "Alune", [_T.UMBRAL, _T.INVOKER]),
-    Champion(3, "Amumu", [_T.PORCELAIN, _T.WARDEN]),
-    Champion(3, "Aphelios", [_T.FATED, _T.SNIPER]),
-    Champion(3, "Bard", [_T.MYTHIC, _T.TRICKSHOT]),
-    Champion(3, "Diana", [_T.DRAGONLORD, _T.SAGE]),
-    Champion(3, "Illaoi", [_T.GHOSTLY, _T.ARCANIST, _T.WARDEN]),
-    Champion(3, "Soraka", [_T.HEAVENLY, _T.ALTRUIST]),
-    Champion(3, "Tahm Kench", [_T.MYTHIC, _T.BRUISER]),
-    Champion(3, "Thresh", [_T.FATED, _T.BEHEMOTH]),
-    Champion(3, "Tristana", [_T.FORTUNE, _T.DUELIST]),
-    Champion(3, "Volibear", [_T.INKSHADOW, _T.DUELIST]),
-    Champion(3, "Yone", [_T.UMBRAL, _T.REAPER]),
-    Champion(3, "Zoe", [_T.FORTUNE, _T.STORYWEAVER, _T.ARCANIST]),
+    Champion(3, "Alune", [_T.UMBRAL, _T.INVOKER], 1, False),
+    Champion(3, "Amumu", [_T.PORCELAIN, _T.WARDEN], 1, False),
+    Champion(3, "Aphelios", [_T.FATED, _T.SNIPER], 4, False),
+    Champion(3, "Bard", [_T.MYTHIC, _T.TRICKSHOT], 4, False),
+    Champion(3, "Diana", [_T.DRAGONLORD, _T.SAGE], 1, False),
+    Champion(3, "Illaoi", [_T.GHOSTLY, _T.ARCANIST, _T.WARDEN], 1, False),
+    Champion(3, "Soraka", [_T.HEAVENLY, _T.ALTRUIST], 4, False),
+    Champion(3, "Tahm Kench", [_T.MYTHIC, _T.BRUISER], 1, False),
+    Champion(3, "Thresh", [_T.FATED, _T.BEHEMOTH], 2, False),
+    Champion(3, "Tristana", [_T.FORTUNE, _T.DUELIST], 4, False),
+    Champion(3, "Volibear", [_T.INKSHADOW, _T.DUELIST], 1, False),
+    Champion(3, "Yone", [_T.UMBRAL, _T.REAPER], 1, False),
+    Champion(3, "Zoe", [_T.FORTUNE, _T.STORYWEAVER, _T.ARCANIST], 4, False),
 
     # 4 costs
-    Champion(4, "Annie", [_T.FORTUNE, _T.INVOKER]),
-    Champion(4, "Ashe", [_T.PORCELAIN, _T.SNIPER]),
-    Champion(4, "Galio", [_T.STORYWEAVER, _T.BRUISER]),
-    Champion(4, "Kai'Sa", [_T.INKSHADOW, _T.TRICKSHOT]),
+    Champion(4, "Annie", [_T.FORTUNE, _T.INVOKER], 1, False),
+    Champion(4, "Ashe", [_T.PORCELAIN, _T.SNIPER], 4, False),
+    Champion(4, "Galio", [_T.STORYWEAVER, _T.BRUISER], 1, False),
+    Champion(4, "Kai'Sa", [_T.INKSHADOW, _T.TRICKSHOT], 4, False),
 
-    Champion(4, "Kayn", [_T.GHOSTLY, _T.REAPER]),
-    Champion(4, "Lee Sin", [_T.DRAGONLORD, _T.DUELIST]),
-    Champion(4, "Lillia", [_T.MYTHIC, _T.INVOKER]),
-    Champion(4, "Morganna", [_T.GHOSTLY, _T.SAGE]),
+    Champion(4, "Kayn", [_T.GHOSTLY, _T.REAPER], 1, False),
+    Champion(4, "Lee Sin", [_T.DRAGONLORD, _T.DUELIST], 1, False),
+    Champion(4, "Lillia", [_T.MYTHIC, _T.INVOKER], 4, False),
+    Champion(4, "Morganna", [_T.GHOSTLY, _T.SAGE], 4, False),
 
-    Champion(4, "Nautilus", [_T.MYTHIC, _T.WARDEN]),
-    Champion(4, "Ornn", [_T.DRYAD, _T.BEHEMOTH]),
-    Champion(4, "Sylas", [_T.UMBRAL, _T.BRUISER]),
-    Champion(4, "Syndra", [_T.FATED, _T.ARCANIST]),
+    Champion(4, "Nautilus", [_T.MYTHIC, _T.WARDEN], 1, False),
+    Champion(4, "Ornn", [_T.DRYAD, _T.BEHEMOTH], 1, False),
+    Champion(4, "Sylas", [_T.UMBRAL, _T.BRUISER], 1, False),
+    Champion(4, "Syndra", [_T.FATED, _T.ARCANIST], 4, False),
 
     # 5 costs
-    Champion(5, "Azir", [_T.DRYAD, _T.INVOKER]),
-    Champion(5, "Hwei", [_T.MYTHIC]),
-    Champion(5, "Irelia", [_T.STORYWEAVER, _T.DUELIST]),
-    Champion(5, "Lissandra", [_T.PORCELAIN, _T.ARCANIST]),
+    Champion(5, "Azir", [_T.DRYAD, _T.INVOKER], 4, False),
+    Champion(5, "Hwei", [_T.MYTHIC], 4, False),
+    Champion(5, "Irelia", [_T.STORYWEAVER, _T.DUELIST], 4, False),
+    Champion(5, "Lissandra", [_T.PORCELAIN, _T.ARCANIST], 2, False),
 
-    Champion(5, "Rakan", [_T.DRAGONLORD, _T.ALTRUIST]),
-    Champion(5, "Sett", [_T.FATED, _T.UMBRAL, _T.WARDEN]),
-    Champion(5, "Udyr", [_T.INKSHADOW, _T.BEHEMOTH]),
-    Champion(5, "Wukong", [_T.HEAVENLY, _T.SAGE]),
+    Champion(5, "Rakan", [_T.DRAGONLORD, _T.ALTRUIST], 4, False),
+    Champion(5, "Sett", [_T.FATED, _T.UMBRAL, _T.WARDEN], 1, False),
+    Champion(5, "Udyr", [_T.INKSHADOW, _T.BEHEMOTH], 1, False),
+    Champion(5, "Wukong", [_T.HEAVENLY, _T.SAGE], 1, False),
 
-    Champion(5, "Xayah", [_T.DRAGONLORD, _T.TRICKSHOT]),
+    Champion(5, "Xayah", [_T.DRAGONLORD, _T.TRICKSHOT], 4, False),
 
 ]
 # fmt: on
