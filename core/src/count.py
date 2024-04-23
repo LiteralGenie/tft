@@ -7,8 +7,10 @@ from tqdm import tqdm
 MAX_TEAM_SIZE = 6
 
 db = init_db()
-ALL_CHAMPIONS = get_all_champions(db)
-ALL_TRAITS = get_all_traits(db)
+cursor = db.cursor()
+
+ALL_CHAMPIONS = get_all_champions(cursor)
+ALL_TRAITS = get_all_traits(cursor)
 CHAMPIONS_BY_TRAIT = get_champions_by_trait(ALL_CHAMPIONS.values())
 
 
@@ -33,18 +35,6 @@ def expand_comp(comp: Composition) -> list[Composition]:
                 candidates.add(c)
 
     return [comp.add(c.id) for c in candidates]
-
-
-def check_exists(comp: Composition) -> bool:
-    result = db.execute(
-        """
-        SELECT is_expanded FROM compositions
-        WHERE hash = %s
-        """,
-        [comp.hash],
-    ).fetchone()
-
-    return result != None
 
 
 def insert_comps(comps: list[Composition], cursor: psycopg.Cursor):
@@ -79,7 +69,7 @@ def fetch_comps_to_expand(limit: int | None = 1_000_000):
         limit_clause = "LIMIT %s" if limit and limit > 0 else ""
         vals.append(limit)
 
-    rows = db.execute(
+    rows = cursor.execute(
         f"""
         SELECT
             id,
@@ -109,9 +99,9 @@ def main():
     if comp_count:
         print(f"Found existing comps in database, skipping initial seed phase")
     else:
-        for champ in ALL_CHAMPIONS.values():
-            insert_comps([Composition([champ.id])], db.cursor())
-            db.commit()
+        with db.transaction():
+            for champ in ALL_CHAMPIONS.values():
+                insert_comps([Composition([champ.id])], cursor)
 
     while True:
         comps = fetch_comps_to_expand(limit=1_000_000)
@@ -120,22 +110,19 @@ def main():
             break
 
         for idx, db_comp in enumerate(tqdm(comps)):
-            cursor = db.cursor()
-            with db.transaction():
-                cmp = db_comp["comp"]
+            cmp = db_comp["comp"]
 
-                update = expand_comp(cmp)
-                # update = [cmp for cmp in update if not check_exists(cmp)]
-                insert_comps(update, db.cursor())
+            update = expand_comp(cmp)
+            insert_comps(update, cursor)
 
-                cursor.execute(
-                    """
-                    UPDATE compositions
-                    SET is_expanded = true
-                    WHERE id = %s
-                    """,
-                    [db_comp["id"]],
-                )
+            cursor.execute(
+                """
+                UPDATE compositions
+                SET is_expanded = true
+                WHERE id = %s
+                """,
+                [db_comp["id"]],
+            )
 
 
 if __name__ == "__main__":

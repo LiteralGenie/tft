@@ -7,6 +7,7 @@ from lib.config import DB_FILE
 from psycopg.rows import dict_row
 
 Database: TypeAlias = psycopg.Connection
+DatabaseOrCursor: TypeAlias = Database | psycopg.Cursor
 
 
 def init_db() -> Database:
@@ -175,7 +176,7 @@ class DbTrait:
         return self.id
 
 
-def get_all_traits(db: Database) -> dict[int, DbTrait]:
+def get_all_traits(db: DatabaseOrCursor) -> dict[int, DbTrait]:
     rows = db.execute(
         """
         SELECT t.id, t.name, ARRAY_AGG(thresh.threshold) thresholds FROM traits t
@@ -201,7 +202,7 @@ class DbChampion:
         return self.id
 
 
-def get_all_champions(db: Database) -> dict[int, DbChampion]:
+def get_all_champions(db: DatabaseOrCursor) -> dict[int, DbChampion]:
     rows = db.execute(
         """
         SELECT c.id, c.cost, c.name, ARRAY_AGG(t.id_trait) as traits FROM champions c
