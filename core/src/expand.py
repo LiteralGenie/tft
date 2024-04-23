@@ -79,10 +79,15 @@ def check_comp_exists(hash: str, cursor: DatabaseOrCursor) -> bool:
 
 
 def insert_comps(comps: Iterable[Composition], cursor: psycopg.Cursor):
-    with cursor.copy("COPY compositions (id, size) FROM STDIN") as copy:
-        for cmp in comps:
-            r = (cmp.hash, len(cmp))
-            copy.write_row(r)
+    cursor.executemany(
+        """
+        INSERT INTO compositions
+            (id, size) VALUES
+            (%s, %s)
+        ON CONFLICT DO NOTHING
+        """,
+        [(cmp.hash, len(cmp)) for cmp in comps],
+    )
 
 
 def update_is_expanded(
@@ -101,7 +106,7 @@ def update_is_expanded(
     )
 
 
-def fetch_comps_to_expand(limit: int | None = 1_000_000):
+def fetch_comps_to_expand(limit: int | None = 10_000):
     vals = [MAX_TEAM_SIZE]
     limit_clause = ""
     if limit and limit > 0:
@@ -164,10 +169,11 @@ def main():
             to_update = [ce.source for ce in expanded_comps]
             update_is_expanded(to_update, cursor)
 
-            to_insert = set([cmp for ce in expanded_comps for cmp in ce.expansions])
-            to_insert = {
-                cmp for cmp in to_insert if not check_comp_exists(cmp.hash, cursor)
-            }
+            to_insert = [cmp for ce in expanded_comps for cmp in ce.expansions]
+            # to_insert = set([cmp for ce in expanded_comps for cmp in ce.expansions])
+            # to_insert = {
+            #     cmp for cmp in to_insert if not check_comp_exists(cmp.hash, cursor)
+            # }
             insert_comps(to_insert, cursor)
 
         elapsed = time.time() - start
