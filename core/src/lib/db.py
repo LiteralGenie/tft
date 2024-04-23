@@ -3,7 +3,6 @@ from typing import Iterable, TypeAlias, cast
 
 import psycopg
 from data._champions import ALL_CHAMPIONS, ALL_TRAITS, Trait
-from lib.config import DB_FILE
 from psycopg.rows import dict_row
 
 Database: TypeAlias = psycopg.Connection

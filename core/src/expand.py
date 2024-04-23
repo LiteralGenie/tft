@@ -1,7 +1,6 @@
 import time
 from dataclasses import dataclass
 from functools import cached_property
-from multiprocessing import Pool
 from typing import Iterable
 
 import psycopg
@@ -170,10 +169,6 @@ def main():
             update_is_expanded(to_update, cursor)
 
             to_insert = [cmp for ce in expanded_comps for cmp in ce.expansions]
-            # to_insert = set([cmp for ce in expanded_comps for cmp in ce.expansions])
-            # to_insert = {
-            #     cmp for cmp in to_insert if not check_comp_exists(cmp.hash, cursor)
-            # }
             insert_comps(to_insert, cursor)
 
         elapsed = time.time() - start
