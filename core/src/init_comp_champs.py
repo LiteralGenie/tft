@@ -1,4 +1,5 @@
 import time
+from typing import Iterable
 
 from lib.db import get_all_champions, init_db
 from lib.utils import print_elapsed
@@ -10,7 +11,7 @@ cursor = db.cursor()
 ALL_CHAMPIONS = get_all_champions(cursor)
 
 
-def fetch_missing(limit=50_000):
+def fetch_missing(limit=1_000_000):
     rows = db.execute(
         """
         SELECT id_composition
@@ -38,7 +39,7 @@ def insert_comp_champs(hashes: list[str], cursor: Cursor):
             copy.write_row(p)
 
 
-def delete_todos(hashes: list[str], cursor: Cursor):
+def delete_todos(hashes: Iterable[str], cursor: Cursor):
     cursor.executemany(
         f"""
         DELETE FROM needs_champions

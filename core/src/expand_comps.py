@@ -9,7 +9,6 @@ import psycopg
 from lib.composition import Composition
 from lib.db import (
     DB_URL,
-    DatabaseOrCursor,
     DbChampion,
     DbTrait,
     get_all_champions,
@@ -22,7 +21,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
 MAX_TEAM_SIZE = 8
-COMPS_PER_ITERATION = 20_000
+COMPS_PER_ITERATION = 500_000
 
 _db = init_db()
 _cursor = _db.cursor()
@@ -66,24 +65,23 @@ def expand_comp(comp: Composition) -> ExpandedComp:
     return ExpandedComp(source=comp, expansions=expansions)
 
 
-def check_comp_exists(hash: str, cursor: DatabaseOrCursor) -> bool:
-    r = cursor.execute(
-        """
-        SELECT 1
-        FROM compositions c
-        WHERE c.id = %s
-        """,
-        [hash],
-    ).fetchone()
-
-    return bool(r)
-
-
 async def insert_comps(comps: Iterable[Composition], conn: psycopg.AsyncConnection):
     async with conn.cursor() as cursor:
         async with cursor.copy("COPY compositions (id, size) FROM STDIN") as copy:
             for cmp in comps:
                 await copy.write_row((cmp.hash, len(cmp)))
+
+        async with cursor.copy(
+            "COPY needs_expansion (id_composition) FROM STDIN"
+        ) as copy:
+            for cmp in comps:
+                await copy.write_row((cmp.hash,))
+
+        async with cursor.copy(
+            "COPY needs_champions (id_composition) FROM STDIN"
+        ) as copy:
+            for cmp in comps:
+                await copy.write_row((cmp.hash,))
 
 
 async def delete_todos(conn: psycopg.AsyncConnection, expanded: Iterable[Composition]):
@@ -161,28 +159,28 @@ async def dedupe_temp(conn: psycopg.AsyncConnection):
 
 
 async def merge_temp(conn: psycopg.AsyncConnection):
-    await conn.execute(
-        """
-        INSERT INTO compositions (id, size)
-        SELECT te.id, te.size
-        FROM temp_expand te
-        """
-    )
-
-    await conn.execute(
-        """
-        INSERT INTO needs_champions (id_composition)
-        SELECT te.id
-        FROM temp_expand te
-        """
-    )
-
-    await conn.execute(
-        """
-        INSERT INTO needs_expansion (id_composition)
-        SELECT te.id
-        FROM temp_expand te
-        """
+    await asyncio.gather(
+        conn.execute(
+            """
+            INSERT INTO compositions (id, size)
+            SELECT te.id, te.size
+            FROM temp_expand te
+            """
+        ),
+        conn.execute(
+            """
+            INSERT INTO needs_champions (id_composition)
+            SELECT te.id
+            FROM temp_expand te
+            """
+        ),
+        conn.execute(
+            """
+            INSERT INTO needs_expansion (id_composition)
+            SELECT te.id
+            FROM temp_expand te
+            """
+        ),
     )
 
 
@@ -228,27 +226,37 @@ async def calculate_updates(conn: psycopg.AsyncConnection) -> dict:
         return await loop.run_in_executor(exe, expand_db_comps, db_comps)
 
 
+async def setup(conn: psycopg.AsyncConnection):
+    # Seed comps-to-expand
+    has_comps = await (
+        await conn.execute("SELECT * FROM compositions LIMIT 1")
+    ).fetchone()
+    if has_comps:
+        print(f"Found existing comps in database, skipping initial seed phase")
+    else:
+        async with conn.transaction():
+            for champ in ALL_CHAMPIONS.values():
+                await insert_comps([Composition([champ.id])], conn)
+
+    # Create temporary table for insertions (bc they need to be existence-checked)
+    async with conn.transaction():
+        await create_temp_insertion(conn)
+        await truncate_temp(conn)
+
+
 async def main():
     async with AsyncConnectionPool(DB_URL, kwargs={"row_factory": dict_row}) as pool:
         async with pool.connection() as conn:
-            # Seed comps-to-expand
-            has_comps = await (
-                await conn.execute("SELECT * FROM compositions LIMIT 1")
-            ).fetchone()
-            if has_comps:
-                print(f"Found existing comps in database, skipping initial seed phase")
-            else:
-                async with conn.transaction():
-                    for champ in ALL_CHAMPIONS.values():
-                        await insert_comps([Composition([champ.id])], conn)
+            await setup(conn)
+            await conn.commit()
 
-            # Create temporary table for insertions (bc they need to be existence-checked)
-            async with conn.transaction():
-                await create_temp_insertion(conn)
-                await truncate_temp(conn)
+    updates = dict()
 
-            updates = dict()
-            while True:
+    while True:
+        async with AsyncConnectionPool(
+            DB_URL, kwargs={"row_factory": dict_row}
+        ) as pool:
+            async with pool.connection() as conn:
                 start = time.time()
                 num_expanded = len(updates.get("to_delete", []))
                 num_created = len(updates.get("to_insert", []))
@@ -262,6 +270,10 @@ async def main():
                     calculate_updates(conn),
                 )
 
+                if not updates["to_insert"] and not updates["to_delete"]:
+                    print(f"no more comps of size < {MAX_TEAM_SIZE} to expand")
+                    break
+
                 elapsed = time.time() - start
                 avg = num_expanded / elapsed
                 print_elapsed(start, f"done ({avg:.1f} expansions/s)")
@@ -269,31 +281,22 @@ async def main():
                 if not updates:
                     break
 
+                await conn.commit()
+
 
 if __name__ == "__main__":
-    # """
-    # @todo: This script is bottlenecked at 2~2.5k compositions / sec by sqlite stuff.
-    #        Specifically the check-if-comp-exists and insert-new-comp queries.
-    #          The existence query is already indexed.
-    #          Running off a ramdisk doesn't help much (maybe <10% faster)
-
-    #        Considering the number of possible comps looks like this
-    #          size   count
-    #             1	        60
-    #             2	       317
-    #             3	     2,272
-    #             4	    18,275
-    #             5	   152,422
-    #             6    1,260,036
-    #             7   10,055,919
-    #             8   76,112,903
-    #        That is way too slow. That implies it'll take <3 hours to calculate comps of size 8 and another <18 hours for size 9.
-
-    #        Postgres might help but probably need to containerize everything first (including devcontainer).
-    #        Also would make testing a pain.
-
-    #        And just for reference, the db eats up ~40 GB on disk (~10 GB gzipped) for up to size 8.
-    # """
+    """
+    Expected comp counts
+        size   count
+        1	        60
+        2	       317
+        3	     2,272
+        4	    18,275
+        5	   152,422
+        6    1,260,036
+        7   10,055,919
+        8   76,112,903
+    """
 
     # import cProfile
     # from pstats import SortKey

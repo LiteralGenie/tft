@@ -126,6 +126,8 @@ def init_db() -> Database:
         """
     )
 
+    db.execute("ALTER USER postgres SET work_mem TO '5GB'")
+
     _init_data(db)
 
     db.commit()
