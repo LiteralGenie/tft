@@ -1,0 +1,5 @@
+/core/venv
+/core/src/data/*.sqlite
+/core/src/data/*.bak
+
+/web/node_modules

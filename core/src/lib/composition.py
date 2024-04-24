@@ -15,6 +15,9 @@ class Composition:
     def __hash__(self) -> int:
         return hash(self.hash)
 
+    def __eq__(self, value: object) -> bool:
+        return hash(value) == hash(self)
+
     def add(self, id_champion: int):
         ids = self.ids.copy() + [id_champion]
         return Composition(ids)

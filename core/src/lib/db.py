@@ -1,22 +1,27 @@
-import sqlite3
 from dataclasses import dataclass
 from typing import Iterable, TypeAlias, cast
 
+import psycopg
 from data._champions import ALL_CHAMPIONS, ALL_TRAITS, Trait
-from lib.config import DB_FILE
+from psycopg.rows import dict_row
 
-Database: TypeAlias = sqlite3.Connection
+Database: TypeAlias = psycopg.Connection
+DatabaseOrCursor: TypeAlias = Database | psycopg.Cursor
+
+DB_URL = "host=db dbname=postgres user=postgres password=postgres"
 
 
 def init_db() -> Database:
-    db = sqlite3.connect(DB_FILE)
-
-    db.row_factory = sqlite3.Row
+    db = psycopg.connect(
+        DB_URL,
+        row_factory=dict_row,
+        autocommit=True,
+    )
 
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS champions (
-            id          INTEGER     PRIMARY KEY,
+            id          SERIAL      PRIMARY KEY,
 
             cost        INTEGER     NOT NULL,
             name        TEXT        NOT NULL,
@@ -29,7 +34,7 @@ def init_db() -> Database:
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS traits (
-            id      INTEGER     PRIMARY KEY,
+            id      SERIAL      PRIMARY KEY,
 
             name    TEXT        NOT NULL
         )
@@ -39,7 +44,7 @@ def init_db() -> Database:
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS trait_thresholds (
-            id          INTEGER     PRIMARY KEY,
+            id          SERIAL      PRIMARY KEY,
             id_trait    INTEGER     NOT NULL,
 
             threshold   INTEGER     NOT NULL,
@@ -67,10 +72,8 @@ def init_db() -> Database:
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS compositions (
-            id              INTEGER     PRIMARY KEY,
+            id              TEXT        PRIMARY KEY,
 
-            hash            TEXT        NOT NULL,
-            is_expanded     BOOLEAN     NOT NULL    DEFAULT 0,
             size            INTEGER     NOT NULL
         )
         """
@@ -79,7 +82,7 @@ def init_db() -> Database:
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS composition_champions (
-            id_composition      INTEGER     NOT NULL,
+            id_composition      TEXT        NOT NULL,
             id_champion         INTEGER     NOT NULL,
 
             FOREIGN KEY (id_composition) REFERENCES compositions(id),
@@ -94,9 +97,9 @@ def init_db() -> Database:
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS scores_by_trait (
-            id_composition  INTEGER     PRIMARY KEY,
+            id_composition      TEXT        PRIMARY KEY,
 
-            score           REAL        NOT NULL,
+            score               REAL        NOT NULL,
 
             FOREIGN KEY (id_composition) REFERENCES compositions(id)
         )
@@ -105,9 +108,25 @@ def init_db() -> Database:
 
     db.execute(
         """
-        CREATE UNIQUE INDEX IF NOT EXISTS hash ON compositions (hash);
+        CREATE TABLE IF NOT EXISTS needs_expansion (
+            id_composition		TEXT		PRIMARY KEY,
+            
+            FOREIGN KEY (id_composition) REFERENCES compositions(id)
+        )
         """
     )
+
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS needs_champions (
+            id_composition		TEXT		PRIMARY KEY,
+            
+            FOREIGN KEY (id_composition) REFERENCES compositions(id)
+        )
+        """
+    )
+
+    db.execute("ALTER USER postgres SET work_mem TO '5GB'")
 
     _init_data(db)
 
@@ -129,7 +148,7 @@ def _init_data(db: Database):
                 """
                     INSERT INTO traits 
                         (id, name) VALUES
-                        (?, ?)
+                        (%s, %s)
                 """,
                 [trait.id, trait.name],
             )
@@ -139,7 +158,7 @@ def _init_data(db: Database):
                     """
                         INSERT INTO trait_thresholds
                             (id_trait, threshold) VALUES
-                            (?, ?)
+                            (%s, %s)
                     """,
                     [trait.id, thresh],
                 )
@@ -153,7 +172,7 @@ def _init_data(db: Database):
                 """
                 INSERT INTO CHAMPIONS
                     (id, cost, name, range, uses_ap) VALUES
-                    (?, ?, ?, ?, ?)
+                    (%s, %s, %s, %s, %s)
                 """,
                 [ch.id, ch.cost, ch.name, ch.range, ch.uses_ap],
             )
@@ -163,7 +182,7 @@ def _init_data(db: Database):
                     """
                     INSERT INTO champion_traits
                         (id_champion, id_trait) VALUES
-                        (?, ?)
+                        (%s, %s)
                     """,
                     [ch.id, trait.id],
                 )
@@ -179,24 +198,17 @@ class DbTrait:
         return self.id
 
 
-def get_all_traits(db: Database) -> dict[int, DbTrait]:
+def get_all_traits(db: DatabaseOrCursor) -> dict[int, DbTrait]:
     rows = db.execute(
         """
-        SELECT t.id, t.name, GROUP_CONCAT(thresh.threshold) thresholds FROM traits t
+        SELECT t.id, t.name, ARRAY_AGG(thresh.threshold) thresholds FROM traits t
         LEFT JOIN trait_thresholds thresh
         ON thresh.id_trait = t.id
         GROUP BY t.id
         """
     ).fetchall()
 
-    traits: dict[int, DbTrait] = dict()
-
-    for r in rows:
-        thresholds = [int(x) for x in r["thresholds"].split(",")]
-        thresholds.sort()
-
-        traits[r["id"]] = DbTrait(id=r["id"], name=r["name"], thresholds=thresholds)
-
+    traits: dict[int, DbTrait] = {r["id"]: DbTrait(**r) for r in rows}
     return traits
 
 
@@ -212,21 +224,16 @@ class DbChampion:
         return self.id
 
 
-def get_all_champions(db: Database) -> dict[int, DbChampion]:
+def get_all_champions(db: DatabaseOrCursor) -> dict[int, DbChampion]:
     rows = db.execute(
         """
-        SELECT c.id, c.cost, c.name, GROUP_CONCAT(t.id_trait) as traits FROM champions c
+        SELECT c.id, c.cost, c.name, ARRAY_AGG(t.id_trait) as traits FROM champions c
         LEFT JOIN champion_traits t ON t.id_champion = c.id
         GROUP BY c.id 
         """
     ).fetchall()
 
-    champions: list[DbChampion] = []
-    for r in rows:
-        data = dict(r)
-        data["traits"] = [int(id) for id in data["traits"].split(",")]
-        champions.append(DbChampion(**data))
-
+    champions: list[DbChampion] = [DbChampion(**r) for r in rows]
     return {c.id: c for c in champions}
 
 
