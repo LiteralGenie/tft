@@ -1,13 +1,31 @@
-from tqdm import tqdm
+import multiprocessing
+import time
+from dataclasses import dataclass
+from itertools import chain
+from typing import Iterable, TypeAlias
 
 from lib.composition import Composition
 from lib.db import DbTrait, get_all_champions, get_all_traits, init_db
+from lib.utils import print_elapsed, to_n_batches
+from psycopg import Cursor
+from tqdm import tqdm
 
 db = init_db()
+cursor = db.cursor()
 ALL_CHAMPIONS = get_all_champions(db)
 ALL_TRAITS = get_all_traits(db)
 
-TRAIT_WEIGHTS: dict[DbTrait, list[float]] = dict()
+TraitWeights: TypeAlias = dict[DbTrait, list[float]]
+TRAIT_WEIGHTS: TraitWeights = dict()
+
+N_WORKERS = 8
+POOL: multiprocessing.Pool = None
+
+
+@dataclass
+class CompositionScore:
+    id_composition: str
+    score: float
 
 
 def init_trait_weights():
@@ -32,16 +50,17 @@ def init_trait_weights():
     assign_weight(trait, weights)
 
 
-def find_missing_scores(limit=10_000_000) -> list[int]:
+def find_missing_scores(limit: int) -> list[str]:
     # Limit h
     rows = db.execute(
         """
         SELECT c.id
         FROM compositions c
         LEFT JOIN scores_by_trait s
-        ON s.id_composition = c.id
-        WHERE s.id_composition IS NULL
-        LIMIT ? 
+            ON s.id_composition = c.id
+        WHERE
+            s.id_composition IS NULL
+        LIMIT %s 
         """,
         [limit],
     ).fetchall()
@@ -49,17 +68,21 @@ def find_missing_scores(limit=10_000_000) -> list[int]:
     return [r["id"] for r in rows]
 
 
-def fetch_comp(id: int) -> Composition:
-    rows = db.execute(
-        """
-        SELECT id_champion
-        FROM composition_champions
-        WHERE id_composition = ?
-        """,
-        [id],
-    ).fetchall()
+def _get_comps(hashes: list[str]) -> list[Composition]:
+    comps: list[Composition] = []
+    for h in hashes:
+        champ_ids = [int(id) for id in h.split(",")]
+        comps.append(Composition(champ_ids))
 
-    return Composition([r["id_champion"] for r in rows])
+    return comps
+
+
+def get_comps(hashes: list[str]) -> list[Composition]:
+    batches = to_n_batches(hashes, N_WORKERS)
+
+    results = list(POOL.imap_unordered(_get_comps, batches))
+
+    return list(chain(*results))
 
 
 def count_traits(comp: Composition) -> dict[DbTrait, int]:
@@ -74,21 +97,21 @@ def count_traits(comp: Composition) -> dict[DbTrait, int]:
     return {ALL_TRAITS[id]: count for id, count in counts.items()}
 
 
-def calc_score(comp: Composition) -> float:
+def calc_score(comp: Composition, weights: TraitWeights) -> CompositionScore:
     score = 0
 
     trait_counts = count_traits(comp)
     for trait, count in trait_counts.items():
-        weight_overrides = TRAIT_WEIGHTS.get(trait)
+        overrides = weights.get(trait)
 
         for idx, thresh in enumerate(trait.thresholds):
             if count >= thresh:
-                if not weight_overrides:
+                if not overrides:
                     # No weight override, use default
                     score += 1
-                elif idx < len(weight_overrides):
+                elif idx < len(overrides):
                     # Use weight override
-                    score += weight_overrides[idx]
+                    score += overrides[idx]
                 else:
                     # Weight overrides for trait but not this count (which is larger than max threshold)
                     break
@@ -96,36 +119,60 @@ def calc_score(comp: Composition) -> float:
                 # Thresholds are in ascending order so we stop checking when one is smaller
                 break
 
-    return score
-
-
-def insert_score(id_composition: int, score: float):
-    db.execute(
-        """
-        INSERT OR REPLACE INTO scores_by_trait
-            (id_composition, score) VALUES
-            (?, ?)
-        """,
-        [id_composition, score],
+    return CompositionScore(
+        id_composition=comp.hash,
+        score=score,
     )
 
 
+def _calc_scores(
+    comps: list[Composition], weights: TraitWeights
+) -> list[CompositionScore]:
+    return [calc_score(c, weights) for c in comps]
+
+
+def calc_scores(
+    comps: list[Composition], weights: TraitWeights
+) -> list[CompositionScore]:
+    batches = to_n_batches(comps, N_WORKERS)
+    args = [(b, weights) for b in batches]
+
+    results = list(POOL.starmap(_calc_scores, args))
+
+    return list(chain(*results))
+
+
+def insert_scores(cursor: Cursor, scores: Iterable[CompositionScore]):
+    params = [(s.id_composition, s.score) for s in scores]
+    with cursor.copy("COPY scores_by_trait (id_composition, score) FROM STDIN") as copy:
+        for p in params:
+            copy.write_row(p)
+
+
 if __name__ == "__main__":
+    POOL = multiprocessing.Pool(N_WORKERS)
+
     init_trait_weights()
 
     while True:
-        # Limit speeds up time-to-first insert (which can take minutes otherwise),
-        # at cost of not knowing how many left
-        missing = find_missing_scores(limit=10_000_000)
+        start = time.time()
+
+        print_elapsed(start, "fetching comps to score")
+        missing = find_missing_scores(limit=1_000_000)
         if not missing:
+            print_elapsed(start, "all comps scored")
             break
 
-        for idx, id in enumerate(tqdm(missing)):
-            comp = fetch_comp(id)
-            score = calc_score(comp)
-            insert_score(id, score)
+        print_elapsed(start, "building comps")
+        comps = get_comps(missing)
 
-            if idx % 1_000_000 == 0:
-                db.commit()
+        print_elapsed(start, "calculating scores")
+        scores = calc_scores(comps, TRAIT_WEIGHTS)
+
+        print_elapsed(start, "inserting scores")
+        with db.transaction():
+            insert_scores(cursor, scores)
+
+        print_elapsed(start, "done")
 
     db.commit()
