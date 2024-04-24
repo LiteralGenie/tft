@@ -75,16 +75,6 @@ def check_comp_exists(hash: str, cursor: DatabaseOrCursor) -> bool:
 
 
 def insert_comps(comps: Iterable[Composition], cursor: psycopg.Cursor):
-    # cursor.executemany(
-    #     """
-    #     INSERT INTO compositions
-    #         (id, size) VALUES
-    #         (%s, %s)
-    #     ON CONFLICT DO NOTHING
-    #     """,
-    #     [(cmp.hash, len(cmp)) for cmp in comps],
-    # )
-
     with cursor.copy("COPY compositions (id, size) FROM STDIN") as copy:
         for cmp in comps:
             copy.write_row((cmp.hash, len(cmp)))
@@ -98,36 +88,6 @@ def delete_todos(expanded: Iterable[Composition], cursor: psycopg.Cursor):
         """,
         [(c.hash,) for c in expanded],
     )
-
-
-def insert_todos(new_comps: Iterable[Composition], cursor: psycopg.Cursor):
-    # cursor.executemany(
-    #     """
-    #     INSERT INTO needs_expansion
-    #         (id_composition) VALUES
-    #         (%s)
-    #     ON CONFLICT DO NOTHING
-    #     """,
-    #     [(cmp.hash,) for cmp in new_comps],
-    # )
-
-    with cursor.copy("COPY needs_expansion (id_composition) FROM STDIN") as copy:
-        for cmp in new_comps:
-            copy.write_row((cmp.hash,))
-
-    # cursor.executemany(
-    #     """
-    #     INSERT INTO needs_champions
-    #         (id_composition) VALUES
-    #         (%s)
-    #     ON CONFLICT DO NOTHING
-    #     """,
-    #     [(cmp.hash,) for cmp in new_comps],
-    # )
-
-    with cursor.copy("COPY needs_champions (id_composition) FROM STDIN") as copy:
-        for cmp in new_comps:
-            copy.write_row((cmp.hash,))
 
 
 def fetch_comps_to_expand(limit: int):
@@ -161,7 +121,67 @@ def fetch_comps_to_expand(limit: int):
     return comps
 
 
+def create_temp_insertion(cursor: psycopg.Cursor):
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS temp_expand (
+            id      TEXT        PRIMARY KEY,
+            size    INTEGER     NOT NULL
+        )
+        """
+    )
+
+    cursor.execute("TRUNCATE temp_expand")
+
+
+def insert_temp(comps: Iterable[Composition], cursor: psycopg.Cursor):
+    with cursor.copy("COPY temp_expand (id, size) FROM STDIN") as copy:
+        for cmp in comps:
+            copy.write_row((cmp.hash, len(cmp)))
+
+
+def dedupe_temp(cursor: psycopg.Cursor):
+    cursor.execute(
+        """
+        DELETE FROM temp_expand te
+        USING compositions c
+        WHERE c.id = te.id
+        """
+    )
+
+
+def merge_temp(cursor: psycopg.Cursor):
+    cursor.execute(
+        """
+        INSERT INTO compositions (id, size)
+        SELECT te.id, te.size
+        FROM temp_expand te
+        """
+    )
+
+    cursor.execute(
+        """
+        INSERT INTO needs_champions (id_composition)
+        SELECT te.id
+        FROM temp_expand te
+        """
+    )
+
+    cursor.execute(
+        """
+        INSERT INTO needs_expansion (id_composition)
+        SELECT te.id
+        FROM temp_expand te
+        """
+    )
+
+
+def truncate_temp(cursor: psycopg.Cursor):
+    cursor.execute("TRUNCATE temp_expand")
+
+
 def main():
+    # Seed comps-to-expand
     has_comps = db.execute("SELECT * FROM compositions LIMIT 1").fetchone()
     if has_comps:
         print(f"Found existing comps in database, skipping initial seed phase")
@@ -170,6 +190,11 @@ def main():
             for champ in ALL_CHAMPIONS.values():
                 insert_comps([Composition([champ.id])], cursor)
         db.commit()
+
+    # Create temporary table for insertions (bc they need to be existence-checked)
+    with db.transaction():
+        create_temp_insertion(cursor)
+        truncate_temp(cursor)
 
     while True:
         start = time.time()
@@ -195,15 +220,19 @@ def main():
 
             print_elapsed(start, "calculating inserts")
             to_insert = [cmp for ce in expanded_comps for cmp in ce.expansions]
-            to_insert = set(
-                [cmp for cmp in to_insert if not check_comp_exists(cmp.hash, cursor)]
-            )
+            to_insert = set(to_insert)
 
-            print_elapsed(start, "inserting comps")
-            insert_comps(to_insert, cursor)
+            print_elapsed(start, "inserting into temp")
+            insert_temp(to_insert, cursor)
 
-            print_elapsed(start, "inserting todos")
-            insert_todos(to_insert, cursor)
+            print_elapsed(start, "deduping temp")
+            dedupe_temp(cursor)
+
+            print_elapsed(start, "merging temp")
+            merge_temp(cursor)
+
+            print_elapsed(start, "truncating temp")
+            truncate_temp(cursor)
 
         elapsed = time.time() - start
         avg = len(comps) / elapsed
