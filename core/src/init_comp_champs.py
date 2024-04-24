@@ -11,7 +11,7 @@ cursor = db.cursor()
 ALL_CHAMPIONS = get_all_champions(cursor)
 
 
-def fetch_missing(limit=30_000):
+def fetch_missing(limit=50_000):
     rows = db.execute(
         """
         SELECT id FROM (
@@ -53,7 +53,7 @@ def main():
         if not missing:
             break
 
-        print_elapsed(start, "inserting")
+        print_elapsed(start, f"inserting {len(missing):,} rows")
         with db.transaction():
             insert_comp_champs(missing, cursor)
 

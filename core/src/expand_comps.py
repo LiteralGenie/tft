@@ -17,10 +17,7 @@ from lib.db import (
 from lib.utils import print_elapsed
 
 MAX_TEAM_SIZE = 8
-
-# PG uses really shitty query plans if this is any larger
-# eg ~300ms for LIMIT 10_000 vs ~30_000ms for LIMIT 20_000
-COMPS_PER_ITERATION = 10_000
+COMPS_PER_ITERATION = 20_000
 
 db = init_db()
 cursor = db.cursor()
@@ -105,7 +102,7 @@ def update_is_expanded(
     )
 
 
-def fetch_comps_to_expand(limit: int | None = 10_000):
+def fetch_comps_to_expand(limit: int):
     vals = [MAX_TEAM_SIZE]
     limit_clause = ""
     if limit and limit > 0:
@@ -114,9 +111,7 @@ def fetch_comps_to_expand(limit: int | None = 10_000):
 
     rows = cursor.execute(
         f"""
-        SELECT
-            id,
-            ARRAY_AGG(champ.id_champion) id_champs
+        SELECT id
         FROM (
             SELECT id 
             FROM compositions comp
@@ -125,14 +120,19 @@ def fetch_comps_to_expand(limit: int | None = 10_000):
                 AND comp.SIZE < %s
             {limit_clause}
         ) AS comp
-        INNER JOIN composition_champions champ
-            ON comp.id = champ.id_composition
         GROUP BY comp.id
         """,
         vals,
     ).fetchall()
 
-    comps = [dict(**r, comp=Composition(r["id_champs"])) for r in rows]
+    comps = [
+        dict(
+            **r,
+            # Infer champions from hash instead of JOIN so we don't have to wait on the init_comp_champs script
+            comp=Composition([int(id) for id in r["id"].split(",")]),
+        )
+        for r in rows
+    ]
 
     return comps
 
