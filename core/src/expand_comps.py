@@ -21,7 +21,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
 MAX_TEAM_SIZE = 8
-COMPS_PER_ITERATION = 500_000
+COMPS_PER_ITERATION = 300_000
 
 _db = init_db()
 _cursor = _db.cursor()
