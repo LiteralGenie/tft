@@ -10,18 +10,17 @@ cursor = db.cursor()
 ALL_CHAMPIONS = get_all_champions(cursor)
 
 
-def fetch_missing(limit=1_000_000):
+def fetch_missing(limit=50_000):
     rows = db.execute(
         """
-        SELECT id
-        FROM compositions c
-        WHERE c.has_champions = false
+        SELECT id_composition
+        FROM needs_champions c
         LIMIT %s
         """,
         [limit],
     )
 
-    return [r["id"] for r in rows]
+    return [r["id_composition"] for r in rows]
 
 
 def insert_comp_champs(hashes: list[str], cursor: Cursor):
@@ -38,14 +37,14 @@ def insert_comp_champs(hashes: list[str], cursor: Cursor):
         for p in params:
             copy.write_row(p)
 
-    vals = ", ".join("%s" for _ in hashes)
-    cursor.execute(
+
+def delete_todos(hashes: list[str], cursor: Cursor):
+    cursor.executemany(
         f"""
-        UPDATE compositions
-        SET has_champions = true
-        WHERE id IN ({vals})
+        DELETE FROM needs_champions
+        WHERE id_composition = %s
         """,
-        hashes,
+        [(h,) for h in hashes],
     )
 
 
@@ -58,9 +57,12 @@ def main():
         if not missing:
             break
 
-        print_elapsed(start, f"inserting {len(missing):,} rows")
         with db.transaction():
+            print_elapsed(start, f"inserting {len(missing):,} rows")
             insert_comp_champs(missing, cursor)
+
+            print_elapsed(start, f"deleting todos")
+            delete_todos(missing, cursor)
 
         elapsed = time.time() - start
         avg = len(missing) / elapsed

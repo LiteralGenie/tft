@@ -86,19 +86,35 @@ def insert_comps(comps: Iterable[Composition], cursor: psycopg.Cursor):
     )
 
 
-def update_is_expanded(
-    comps: Iterable[Composition],
-    cursor: psycopg.Cursor,
-):
-    params = [cmp.hash for cmp in comps]
-    vals = ", ".join("%s" for _ in params)
-    cursor.execute(
-        f"""
-        UPDATE compositions c
-        SET is_expanded = true
-        WHERE c.id IN ({vals})
+def delete_todos(expanded: Iterable[Composition], cursor: psycopg.Cursor):
+    cursor.executemany(
+        """
+        DELETE FROM needs_expansion
+        WHERE id_composition = %s
         """,
-        params,
+        [(c.hash,) for c in expanded],
+    )
+
+
+def insert_todos(new_comps: Iterable[Composition], cursor: psycopg.Cursor):
+    cursor.executemany(
+        """
+        INSERT INTO needs_expansion
+            (id_composition) VALUES
+            (%s)
+        ON CONFLICT DO NOTHING
+        """,
+        [(cmp.hash,) for cmp in new_comps],
+    )
+
+    cursor.executemany(
+        """
+        INSERT INTO needs_champions
+            (id_composition) VALUES
+            (%s)
+        ON CONFLICT DO NOTHING
+        """,
+        [(cmp.hash,) for cmp in new_comps],
     )
 
 
@@ -111,16 +127,12 @@ def fetch_comps_to_expand(limit: int):
 
     rows = cursor.execute(
         f"""
-        SELECT id
-        FROM (
-            SELECT id 
-            FROM compositions comp
-            WHERE
-                comp.is_expanded = FALSE
-                AND comp.SIZE < %s
-            {limit_clause}
-        ) AS comp
-        GROUP BY comp.id
+        SELECT c.id
+        FROM compositions c
+        INNER JOIN needs_expansion ne
+            ON ne.id_composition = c.id
+        WHERE c.size < %s
+        {limit_clause}
         """,
         vals,
     ).fetchall()
@@ -165,11 +177,12 @@ def main():
 
         print_elapsed(start, "inserting")
         with db.transaction():
-            to_update = [ce.source for ce in expanded_comps]
-            update_is_expanded(to_update, cursor)
+            to_delete = [ce.source for ce in expanded_comps]
+            delete_todos(to_delete, cursor)
 
             to_insert = [cmp for ce in expanded_comps for cmp in ce.expansions]
             insert_comps(to_insert, cursor)
+            insert_todos(to_insert, cursor)
 
         elapsed = time.time() - start
         avg = len(comps) / elapsed

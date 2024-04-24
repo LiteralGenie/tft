@@ -72,7 +72,6 @@ def init_db() -> Database:
         CREATE TABLE IF NOT EXISTS compositions (
             id              TEXT        PRIMARY KEY,
 
-            is_expanded     BOOLEAN     NOT NULL    DEFAULT false,
             size            INTEGER     NOT NULL
         )
         """
@@ -100,6 +99,26 @@ def init_db() -> Database:
 
             score               REAL        NOT NULL,
 
+            FOREIGN KEY (id_composition) REFERENCES compositions(id)
+        )
+        """
+    )
+
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS needs_expansion (
+            id_composition		TEXT		PRIMARY KEY,
+            
+            FOREIGN KEY (id_composition) REFERENCES compositions(id)
+        )
+        """
+    )
+
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS needs_champions (
+            id_composition		TEXT		PRIMARY KEY,
+            
             FOREIGN KEY (id_composition) REFERENCES compositions(id)
         )
         """
