@@ -1,6 +1,5 @@
 import time
 
-from lib.composition import Composition
 from lib.db import get_all_champions, init_db
 from lib.utils import print_elapsed
 from psycopg import Cursor
@@ -11,16 +10,12 @@ cursor = db.cursor()
 ALL_CHAMPIONS = get_all_champions(cursor)
 
 
-def fetch_missing(limit=50_000):
+def fetch_missing(limit=1_000_000):
     rows = db.execute(
         """
-        SELECT id FROM (
-            SELECT id, SUM(CASE WHEN cc.id_champion IS NULL THEN 1 ELSE 0 END) null_count FROM compositions c
-            LEFT JOIN composition_champions cc 
-                ON cc.id_composition = c.id
-            GROUP BY c.id
-        )
-        WHERE null_count > 0
+        SELECT id
+        FROM compositions c
+        WHERE c.has_champions = false
         LIMIT %s
         """,
         [limit],
@@ -42,6 +37,16 @@ def insert_comp_champs(hashes: list[str], cursor: Cursor):
     ) as copy:
         for p in params:
             copy.write_row(p)
+
+    vals = ", ".join("%s" for _ in hashes)
+    cursor.execute(
+        f"""
+        UPDATE compositions
+        SET has_champions = true
+        WHERE id IN ({vals})
+        """,
+        hashes,
+    )
 
 
 def main():
