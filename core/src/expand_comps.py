@@ -75,15 +75,19 @@ def check_comp_exists(hash: str, cursor: DatabaseOrCursor) -> bool:
 
 
 def insert_comps(comps: Iterable[Composition], cursor: psycopg.Cursor):
-    cursor.executemany(
-        """
-        INSERT INTO compositions
-            (id, size) VALUES
-            (%s, %s)
-        ON CONFLICT DO NOTHING
-        """,
-        [(cmp.hash, len(cmp)) for cmp in comps],
-    )
+    # cursor.executemany(
+    #     """
+    #     INSERT INTO compositions
+    #         (id, size) VALUES
+    #         (%s, %s)
+    #     ON CONFLICT DO NOTHING
+    #     """,
+    #     [(cmp.hash, len(cmp)) for cmp in comps],
+    # )
+
+    with cursor.copy("COPY compositions (id, size) FROM STDIN") as copy:
+        for cmp in comps:
+            copy.write_row((cmp.hash, len(cmp)))
 
 
 def delete_todos(expanded: Iterable[Composition], cursor: psycopg.Cursor):
@@ -97,25 +101,33 @@ def delete_todos(expanded: Iterable[Composition], cursor: psycopg.Cursor):
 
 
 def insert_todos(new_comps: Iterable[Composition], cursor: psycopg.Cursor):
-    cursor.executemany(
-        """
-        INSERT INTO needs_expansion
-            (id_composition) VALUES
-            (%s)
-        ON CONFLICT DO NOTHING
-        """,
-        [(cmp.hash,) for cmp in new_comps],
-    )
+    # cursor.executemany(
+    #     """
+    #     INSERT INTO needs_expansion
+    #         (id_composition) VALUES
+    #         (%s)
+    #     ON CONFLICT DO NOTHING
+    #     """,
+    #     [(cmp.hash,) for cmp in new_comps],
+    # )
 
-    cursor.executemany(
-        """
-        INSERT INTO needs_champions
-            (id_composition) VALUES
-            (%s)
-        ON CONFLICT DO NOTHING
-        """,
-        [(cmp.hash,) for cmp in new_comps],
-    )
+    with cursor.copy("COPY needs_expansion (id_composition) FROM STDIN") as copy:
+        for cmp in new_comps:
+            copy.write_row((cmp.hash,))
+
+    # cursor.executemany(
+    #     """
+    #     INSERT INTO needs_champions
+    #         (id_composition) VALUES
+    #         (%s)
+    #     ON CONFLICT DO NOTHING
+    #     """,
+    #     [(cmp.hash,) for cmp in new_comps],
+    # )
+
+    with cursor.copy("COPY needs_champions (id_composition) FROM STDIN") as copy:
+        for cmp in new_comps:
+            copy.write_row((cmp.hash,))
 
 
 def fetch_comps_to_expand(limit: int):
@@ -175,13 +187,22 @@ def main():
             ce = expand_comp(cmp)
             expanded_comps.append(ce)
 
-        print_elapsed(start, "inserting")
         with db.transaction():
             to_delete = [ce.source for ce in expanded_comps]
+
+            print_elapsed(start, "deleting todos")
             delete_todos(to_delete, cursor)
 
+            print_elapsed(start, "calculating inserts")
             to_insert = [cmp for ce in expanded_comps for cmp in ce.expansions]
+            to_insert = set(
+                [cmp for cmp in to_insert if not check_comp_exists(cmp.hash, cursor)]
+            )
+
+            print_elapsed(start, "inserting comps")
             insert_comps(to_insert, cursor)
+
+            print_elapsed(start, "inserting todos")
             insert_todos(to_insert, cursor)
 
         elapsed = time.time() - start
