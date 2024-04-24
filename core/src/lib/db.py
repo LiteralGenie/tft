@@ -8,10 +8,12 @@ from psycopg.rows import dict_row
 Database: TypeAlias = psycopg.Connection
 DatabaseOrCursor: TypeAlias = Database | psycopg.Cursor
 
+DB_URL = "host=db dbname=postgres user=postgres password=postgres"
+
 
 def init_db() -> Database:
     db = psycopg.connect(
-        "host=db dbname=postgres user=postgres password=postgres",
+        DB_URL,
         row_factory=dict_row,
         autocommit=True,
     )

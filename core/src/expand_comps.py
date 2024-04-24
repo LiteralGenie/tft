@@ -1,3 +1,4 @@
+import asyncio
 import time
 from dataclasses import dataclass
 from functools import cached_property
@@ -6,6 +7,7 @@ from typing import Iterable
 import psycopg
 from lib.composition import Composition
 from lib.db import (
+    DB_URL,
     DatabaseOrCursor,
     DbChampion,
     DbTrait,
@@ -15,15 +17,17 @@ from lib.db import (
     init_db,
 )
 from lib.utils import print_elapsed
+from psycopg.rows import dict_row
+from psycopg_pool import AsyncConnectionPool
 
 MAX_TEAM_SIZE = 8
 COMPS_PER_ITERATION = 20_000
 
-db = init_db()
-cursor = db.cursor()
+_db = init_db()
+_cursor = _db.cursor()
 
-ALL_CHAMPIONS = get_all_champions(cursor)
-ALL_TRAITS = get_all_traits(cursor)
+ALL_CHAMPIONS = get_all_champions(_cursor)
+ALL_TRAITS = get_all_traits(_cursor)
 CHAMPIONS_BY_TRAIT = get_champions_by_trait(ALL_CHAMPIONS.values())
 
 
@@ -74,31 +78,34 @@ def check_comp_exists(hash: str, cursor: DatabaseOrCursor) -> bool:
     return bool(r)
 
 
-def insert_comps(comps: Iterable[Composition], cursor: psycopg.Cursor):
-    with cursor.copy("COPY compositions (id, size) FROM STDIN") as copy:
-        for cmp in comps:
-            copy.write_row((cmp.hash, len(cmp)))
+async def insert_comps(comps: Iterable[Composition], conn: psycopg.AsyncConnection):
+    async with conn.cursor() as cursor:
+        async with cursor.copy("COPY compositions (id, size) FROM STDIN") as copy:
+            for cmp in comps:
+                await copy.write_row((cmp.hash, len(cmp)))
 
 
-def delete_todos(expanded: Iterable[Composition], cursor: psycopg.Cursor):
-    cursor.executemany(
-        """
-        DELETE FROM needs_expansion
-        WHERE id_composition = %s
-        """,
-        [(c.hash,) for c in expanded],
-    )
+async def delete_todos(conn: psycopg.AsyncConnection, expanded: Iterable[Composition]):
+    async with conn.cursor() as cursor:
+        await cursor.executemany(
+            """
+            DELETE FROM needs_expansion
+            WHERE id_composition = %s
+            """,
+            [(c.hash,) for c in expanded],
+        )
 
 
-def fetch_comps_to_expand(limit: int):
+async def fetch_comps_to_expand(conn: psycopg.AsyncConnection, limit: int):
     vals = [MAX_TEAM_SIZE]
     limit_clause = ""
     if limit and limit > 0:
         limit_clause = "LIMIT %s" if limit and limit > 0 else ""
         vals.append(limit)
 
-    rows = cursor.execute(
-        f"""
+    rows = await (
+        await conn.execute(
+            f"""
         SELECT c.id
         FROM compositions c
         INNER JOIN needs_expansion ne
@@ -106,7 +113,8 @@ def fetch_comps_to_expand(limit: int):
         WHERE c.size < %s
         {limit_clause}
         """,
-        vals,
+            vals,
+        )
     ).fetchall()
 
     comps = [
@@ -121,8 +129,8 @@ def fetch_comps_to_expand(limit: int):
     return comps
 
 
-def create_temp_insertion(cursor: psycopg.Cursor):
-    cursor.execute(
+async def create_temp_insertion(conn: psycopg.AsyncConnection):
+    await conn.execute(
         """
         CREATE TABLE IF NOT EXISTS temp_expand (
             id      TEXT        PRIMARY KEY,
@@ -131,17 +139,18 @@ def create_temp_insertion(cursor: psycopg.Cursor):
         """
     )
 
-    cursor.execute("TRUNCATE temp_expand")
+    await conn.execute("TRUNCATE temp_expand")
 
 
-def insert_temp(comps: Iterable[Composition], cursor: psycopg.Cursor):
-    with cursor.copy("COPY temp_expand (id, size) FROM STDIN") as copy:
-        for cmp in comps:
-            copy.write_row((cmp.hash, len(cmp)))
+async def insert_temp(conn: psycopg.AsyncConnection, comps: Iterable[Composition]):
+    async with conn.cursor() as cursor:
+        async with cursor.copy("COPY temp_expand (id, size) FROM STDIN") as copy:
+            for cmp in comps:
+                await copy.write_row((cmp.hash, len(cmp)))
 
 
-def dedupe_temp(cursor: psycopg.Cursor):
-    cursor.execute(
+async def dedupe_temp(conn: psycopg.AsyncConnection):
+    await conn.execute(
         """
         DELETE FROM temp_expand te
         USING compositions c
@@ -150,8 +159,8 @@ def dedupe_temp(cursor: psycopg.Cursor):
     )
 
 
-def merge_temp(cursor: psycopg.Cursor):
-    cursor.execute(
+async def merge_temp(conn: psycopg.AsyncConnection):
+    await conn.execute(
         """
         INSERT INTO compositions (id, size)
         SELECT te.id, te.size
@@ -159,7 +168,7 @@ def merge_temp(cursor: psycopg.Cursor):
         """
     )
 
-    cursor.execute(
+    await conn.execute(
         """
         INSERT INTO needs_champions (id_composition)
         SELECT te.id
@@ -167,7 +176,7 @@ def merge_temp(cursor: psycopg.Cursor):
         """
     )
 
-    cursor.execute(
+    await conn.execute(
         """
         INSERT INTO needs_expansion (id_composition)
         SELECT te.id
@@ -176,67 +185,82 @@ def merge_temp(cursor: psycopg.Cursor):
     )
 
 
-def truncate_temp(cursor: psycopg.Cursor):
-    cursor.execute("TRUNCATE temp_expand")
+async def truncate_temp(conn: psycopg.AsyncConnection):
+    await conn.execute("TRUNCATE temp_expand")
 
 
-def main():
-    # Seed comps-to-expand
-    has_comps = db.execute("SELECT * FROM compositions LIMIT 1").fetchone()
-    if has_comps:
-        print(f"Found existing comps in database, skipping initial seed phase")
-    else:
-        with db.transaction():
-            for champ in ALL_CHAMPIONS.values():
-                insert_comps([Composition([champ.id])], cursor)
-        db.commit()
+async def process_expansions(
+    conn: psycopg.AsyncConnection,
+    to_insert: list[Composition] | None = None,
+    to_delete: list[Composition] | None = None,
+):
+    async with conn.transaction():
+        if to_delete:
+            await delete_todos(conn, to_delete)
 
-    # Create temporary table for insertions (bc they need to be existence-checked)
-    with db.transaction():
-        create_temp_insertion(cursor)
-        truncate_temp(cursor)
+        if to_insert:
+            await insert_temp(conn, to_insert)
+            await dedupe_temp(conn)
+            await merge_temp(conn)
+            await truncate_temp(conn)
 
-    while True:
-        start = time.time()
 
-        print_elapsed(start, "fetching comps")
-        comps = fetch_comps_to_expand(limit=COMPS_PER_ITERATION)
-        if not comps:
-            break
+async def calculate_updates(conn: psycopg.AsyncConnection) -> dict:
+    db_comps = await fetch_comps_to_expand(conn, limit=COMPS_PER_ITERATION)
 
-        print_elapsed(start, "expanding")
-        expanded_comps: list[ExpandedComp] = list()
-        for db_comp in comps:
-            cmp = db_comp["comp"]
+    expanded_comps: list[ExpandedComp] = list()
+    for db_comp in db_comps:
+        cmp = db_comp["comp"]
 
-            ce = expand_comp(cmp)
-            expanded_comps.append(ce)
+        ce = expand_comp(cmp)
+        expanded_comps.append(ce)
 
-        with db.transaction():
-            to_delete = [ce.source for ce in expanded_comps]
+    to_insert = set([cmp for ce in expanded_comps for cmp in ce.expansions])
+    to_delete = [ce.source for ce in expanded_comps]
 
-            print_elapsed(start, "deleting todos")
-            delete_todos(to_delete, cursor)
+    return dict(to_insert=to_insert, to_delete=to_delete)
 
-            print_elapsed(start, "calculating inserts")
-            to_insert = [cmp for ce in expanded_comps for cmp in ce.expansions]
-            to_insert = set(to_insert)
 
-            print_elapsed(start, "inserting into temp")
-            insert_temp(to_insert, cursor)
+async def main():
+    async with AsyncConnectionPool(DB_URL, kwargs={"row_factory": dict_row}) as pool:
+        async with pool.connection() as conn:
+            # Seed comps-to-expand
+            has_comps = await (
+                await conn.execute("SELECT * FROM compositions LIMIT 1")
+            ).fetchone()
+            if has_comps:
+                print(f"Found existing comps in database, skipping initial seed phase")
+            else:
+                async with conn.transaction():
+                    for champ in ALL_CHAMPIONS.values():
+                        await insert_comps([Composition([champ.id])], conn)
 
-            print_elapsed(start, "deduping temp")
-            dedupe_temp(cursor)
+            # Create temporary table for insertions (bc they need to be existence-checked)
+            async with conn.transaction():
+                await create_temp_insertion(conn)
+                await truncate_temp(conn)
 
-            print_elapsed(start, "merging temp")
-            merge_temp(cursor)
+            updates = dict()
+            while True:
+                start = time.time()
+                num_expanded = len(updates.get("to_delete", []))
+                num_created = len(updates.get("to_insert", []))
 
-            print_elapsed(start, "truncating temp")
-            truncate_temp(cursor)
+                print_elapsed(
+                    start,
+                    f"processing {num_expanded:,} comps that were expanded to {num_created:,} new comps",
+                )
+                [_, updates] = await asyncio.gather(
+                    process_expansions(conn, **updates),
+                    calculate_updates(conn),
+                )
 
-        elapsed = time.time() - start
-        avg = len(comps) / elapsed
-        print_elapsed(start, f"done ({avg:.1f} it/s)")
+                elapsed = time.time() - start
+                avg = num_expanded / elapsed
+                print_elapsed(start, f"done ({avg:.1f} expansions/s)")
+
+                if not updates:
+                    break
 
 
 if __name__ == "__main__":
@@ -264,9 +288,9 @@ if __name__ == "__main__":
     #        And just for reference, the db eats up ~40 GB on disk (~10 GB gzipped) for up to size 8.
     # """
 
-    import cProfile
-    from pstats import SortKey
+    # import cProfile
+    # from pstats import SortKey
 
-    cProfile.run("main()", sort=SortKey.CUMULATIVE)
+    # cProfile.run("main()", sort=SortKey.CUMULATIVE)
 
-    # main()
+    asyncio.run(main())
