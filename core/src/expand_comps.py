@@ -193,15 +193,14 @@ async def process_expansions(
     to_insert: list[Composition] | None = None,
     to_delete: list[Composition] | None = None,
 ):
-    async with conn.transaction():
-        if to_delete:
-            await delete_todos(conn, to_delete)
+    if to_delete:
+        await delete_todos(conn, to_delete)
 
-        if to_insert:
-            await insert_temp(conn, to_insert)
-            await dedupe_temp(conn)
-            await merge_temp(conn)
-            await truncate_temp(conn)
+    if to_insert:
+        await insert_temp(conn, to_insert)
+        await dedupe_temp(conn)
+        await merge_temp(conn)
+        await truncate_temp(conn)
 
 
 def expand_db_comps(db_comps: list[dict]):
@@ -248,7 +247,7 @@ async def main():
     async with AsyncConnectionPool(DB_URL, kwargs={"row_factory": dict_row}) as pool:
         async with pool.connection() as conn:
             await setup(conn)
-            await conn.commit()
+            # await conn.commit()
 
     updates = dict()
 
@@ -281,7 +280,7 @@ async def main():
                 if not updates:
                     break
 
-                await conn.commit()
+                # await conn.commit()
 
 
 if __name__ == "__main__":
