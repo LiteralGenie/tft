@@ -1,5 +1,6 @@
 import asyncio
 import time
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from functools import cached_property
 from typing import Iterable
@@ -205,9 +206,7 @@ async def process_expansions(
             await truncate_temp(conn)
 
 
-async def calculate_updates(conn: psycopg.AsyncConnection) -> dict:
-    db_comps = await fetch_comps_to_expand(conn, limit=COMPS_PER_ITERATION)
-
+def expand_db_comps(db_comps: list[dict]):
     expanded_comps: list[ExpandedComp] = list()
     for db_comp in db_comps:
         cmp = db_comp["comp"]
@@ -219,6 +218,14 @@ async def calculate_updates(conn: psycopg.AsyncConnection) -> dict:
     to_delete = [ce.source for ce in expanded_comps]
 
     return dict(to_insert=to_insert, to_delete=to_delete)
+
+
+async def calculate_updates(conn: psycopg.AsyncConnection) -> dict:
+    db_comps = await fetch_comps_to_expand(conn, limit=COMPS_PER_ITERATION)
+
+    loop = asyncio.get_running_loop()
+    with ProcessPoolExecutor() as exe:
+        return await loop.run_in_executor(exe, expand_db_comps, db_comps)
 
 
 async def main():
