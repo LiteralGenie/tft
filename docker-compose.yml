@@ -3,7 +3,7 @@ version: '3.8'
 services:
   db:
     image: postgres
-    shm_size: 2gb
+    shm_size: 4gb
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
